@@ -11,32 +11,13 @@ using UnityEngine.UIElements;
 /**
  * Handles teleporting entities to the other side when they leave the screen
  * */
-//[UpdateAfter(typeof(Physics))]
 public partial class WrapAroundEdgesSystem : SystemBase
 {
     private EntityQuery _query;
-    private float _bottomEdge;
-    private float _topEdge;
-    private float _leftEdge;
-    private float _rightEdge;
+
+    private const float MARGIN = 0.5f;
 
     protected override void OnCreate()
-    {
-        Camera camera = Camera.main;
-
-        Vector3 worldBottomLeft = camera.ViewportToWorldPoint(new Vector3(0f, 0f, 0f));
-        Vector3 worldTopRight = camera.ViewportToWorldPoint(new Vector3(1f, 1f, 0f));
-
-        float worldWidth = worldTopRight.x - worldBottomLeft.x;
-        float worldHeight = worldTopRight.y - worldBottomLeft.y;
-
-        _bottomEdge = -worldHeight / 2;
-        _topEdge = worldHeight / 2;
-        _leftEdge = -worldWidth / 2;
-        _rightEdge = worldWidth / 2;
-    }
-
-    protected override void OnStartRunning()
     {
         _query = EntityManager.CreateEntityQuery(
             ComponentType.ReadWrite<Translation>(),
@@ -46,12 +27,14 @@ public partial class WrapAroundEdgesSystem : SystemBase
 
     protected override void OnUpdate()
     {
+        var gameArea = GameArea.Instance;
+
         new WrapAroundEdgesJob()
         {
-            BottomEdge = _bottomEdge,
-            TopEdge = _topEdge,
-            LeftEdge = _leftEdge,
-            RightEdge = _rightEdge
+            BottomEdge = gameArea.BottomEdge - MARGIN,
+            TopEdge = gameArea.TopEdge + MARGIN,
+            LeftEdge = gameArea.LeftEdge - MARGIN,
+            RightEdge = gameArea.RightEdge + MARGIN
         }
         .ScheduleParallel(_query);
     }

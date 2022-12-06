@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_TagNames:
   - Player
-  - Meteor
-  - Bullet
+  - Asteroid
+  - PlayerBullet
+  - EnemyBullet
   - UFO
-  - 
   - 
   - 
   - 

@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 79f877434772c463192af154345455c9, type: 3}
-  m_Name: PlayerPhysicsMaterial
+  m_Name: PlayerBulletPhysicsMaterial
   m_EditorClassIdentifier: 
   m_Value:
     m_SupportsTemplate: 0
@@ -32,8 +32,8 @@ MonoBehaviour:
       m_Override: 0
       m_Value:
         Category00: 0
-        Category01: 1
-        Category02: 0
+        Category01: 0
+        Category02: 1
         Category03: 0
         Category04: 0
         Category05: 0
@@ -69,7 +69,7 @@ MonoBehaviour:
         Category00: 1
         Category01: 0
         Category02: 0
-        Category03: 1
+        Category03: 0
         Category04: 1
         Category05: 1
         Category06: 1
@@ -101,9 +101,9 @@ MonoBehaviour:
     m_CustomMaterialTags:
       m_Override: 0
       m_Value:
-        Tag00: 1
+        Tag00: 0
         Tag01: 0
-        Tag02: 0
+        Tag02: 1
         Tag03: 0
         Tag04: 0
         Tag05: 0
