@@ -14,44 +14,46 @@ using Unity.Transforms;
 [UpdateAfter(typeof(BeginInitializationEntityCommandBufferSystem))]
 public partial class InitializeAsteroidsSystem : SystemBase
 {
-    private Random _randomGenerator;
     private EntityQuery _query;
     private EndInitializationEntityCommandBufferSystem _ecbSystem;
 
     protected override void OnCreate()
     {
         _ecbSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>();
-        _randomGenerator = new Random((uint)System.DateTime.Now.TimeOfDay.TotalSeconds + (uint)Time.ElapsedTime);
+
+        _query = GetEntityQuery(
+            ComponentType.ReadOnly<AsteroidRotationData>(),
+            ComponentType.ReadOnly<AsteroidSpeedData>(),
+            ComponentType.ReadWrite<NeedsInitTag>(),
+            ComponentType.ReadWrite<PhysicsVelocity>());
     }
 
     protected override void OnUpdate()
-    {
-        Random random = _randomGenerator;
-        _query = GetEntityQuery(
-            ComponentType.ReadOnly<NeedsInitTag>(),
-            ComponentType.ReadOnly<AsteroidRotationData>(),
-            ComponentType.ReadOnly<AsteroidSpeedData>(),
-            ComponentType.ReadWrite<PhysicsVelocity>());
-
+    { 
         Entities
             .WithStoreEntityQueryInField(ref _query)
             .ForEach((
+                int entityInQueryIndex,
                 ref PhysicsVelocity velocity, 
                 in AsteroidRotationData rotationData,
-                in AsteroidSpeedData speedData
+                in AsteroidSpeedData speedData,
+                in NeedsInitTag tag
                 ) => 
             {
+                Random random = Random.CreateFromIndex((uint)entityInQueryIndex);
+
                 float randomSpeed = random.NextFloat(speedData.MinSpeed, speedData.MaxSpeed);
                 float2 randomVelocity = random.NextFloat2Direction() * randomSpeed;
                 velocity.Linear = new float3(randomVelocity.x, randomVelocity.y, 0f);
 
                 float randomAngularSpeed = random.NextFloat(rotationData.MaxSpeed);
                 velocity.Angular = new float3(0f, 0f, randomAngularSpeed);
-
+                
             }).ScheduleParallel();
 
         EntityCommandBuffer commandBuffer = _ecbSystem.CreateCommandBuffer();
         commandBuffer.RemoveComponentForEntityQuery(_query, typeof(NeedsInitTag));
+
         _ecbSystem.AddJobHandleForProducer(this.Dependency);
     }
 }

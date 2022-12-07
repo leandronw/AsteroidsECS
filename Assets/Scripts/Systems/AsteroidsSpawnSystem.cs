@@ -12,22 +12,22 @@ using UnityEngine.PlayerLoop;
 /*
  * Gathers all AsteroidSpawnRequestData components and spawn the required entities 
  */
-[UpdateBefore(typeof(EndSimulationEntityCommandBufferSystem))]
+[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
 
 public partial class AsteroidsSpawnSystem : SystemBase
 {
-    private EndSimulationEntityCommandBufferSystem _entityCommandBufferSystem;
+    private BeginSimulationEntityCommandBufferSystem _entityCommandBufferSystem;
     private EntityQuery _query;
 
     protected override void OnCreate()
     {
-        _entityCommandBufferSystem = World.GetOrCreateSystem<EndSimulationEntityCommandBufferSystem>();
+        _entityCommandBufferSystem = World.GetOrCreateSystem<BeginSimulationEntityCommandBufferSystem>();
+        _query = GetEntityQuery(ComponentType.ReadWrite<AsteroidSpawnRequestData>());
     }
 
     protected override void OnUpdate()
     {
         EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-        _query = GetEntityQuery(ComponentType.ReadOnly<AsteroidSpawnRequestData>());
 
         Entities
             .WithStoreEntityQueryInField(ref _query)

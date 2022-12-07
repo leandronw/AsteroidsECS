@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 /*
@@ -13,6 +14,9 @@ public class GameArea : MonoBehaviour
     public float TopEdge { get; private set; }
     public float LeftEdge { get; private set; }
     public float RightEdge { get; private set; }
+
+    public float Width { get; private set; }
+    public float Height { get; private set; }
 
     private Vector2 screenResolution;
 
@@ -51,12 +55,14 @@ public class GameArea : MonoBehaviour
         Vector3 worldBottomLeft = camera.ViewportToWorldPoint(new Vector3(0f, 0f, 0f));
         Vector3 worldTopRight = camera.ViewportToWorldPoint(new Vector3(1f, 1f, 0f));
 
-        float worldWidth = worldTopRight.x - worldBottomLeft.x;
-        float worldHeight = worldTopRight.y - worldBottomLeft.y;
+        Width = worldTopRight.x - worldBottomLeft.x;
+        Height = worldTopRight.y - worldBottomLeft.y;
 
-        BottomEdge = -worldHeight / 2;
-        TopEdge = worldHeight / 2;
-        LeftEdge = -worldWidth / 2;
-        RightEdge = worldWidth / 2;
+        BottomEdge = -Height / 2;
+        TopEdge = Height / 2;
+        LeftEdge = -Width / 2;
+        RightEdge = Width / 2;
+
+        Debug.Log($"Game Area - Width: {Width} - Height: {Height}");
     }
 }

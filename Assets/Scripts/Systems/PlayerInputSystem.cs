@@ -34,6 +34,7 @@ public partial class PlayerInputSystem : SystemBase
         Entities
             .WithoutBurst()
             .ForEach((
+                Entity playerEntity,
                 ref PhysicsVelocity velocity,
                 ref Rotation rotation, 
                 ref BulletSpawnData bulletSpawnData,
@@ -43,6 +44,8 @@ public partial class PlayerInputSystem : SystemBase
                 in PlayerInputData inputData
                 ) =>
             {
+                EntityCommandBuffer ecb = _ecbSystem.CreateCommandBuffer();
+
                 if (inputData.IsTurningLeft)
                 {
                     rotation.Value = math.mul(rotation.Value, quaternion.RotateZ(rotationData.Speed * deltaTime));
@@ -61,6 +64,11 @@ public partial class PlayerInputSystem : SystemBase
                     {
                         velocity.Linear += forwardVector * accelerationData.Acceleration * deltaTime;
                     }
+                    ecb.AddComponent<ThrustingTag>(playerEntity);
+                }
+                else
+                {
+                    ecb.RemoveComponent<ThrustingTag>(playerEntity);
                 }
 
                 bulletSpawnData.ElapsedTimeSinceLast += deltaTime;
@@ -70,6 +78,11 @@ public partial class PlayerInputSystem : SystemBase
                 {
                     bulletSpawnData.ElapsedTimeSinceLast = 0;
                     SpawnBullet(in velocity, in rotation, in position, in bulletSpawnData);
+                }
+
+                if (inputData.IsJumpingToHyperspace)
+                {
+                    ecb.AddComponent<JumpToHyperspaceTag>(playerEntity);
                 }
             })
             .Run();
