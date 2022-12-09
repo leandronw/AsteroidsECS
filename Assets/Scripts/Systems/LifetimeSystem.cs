@@ -1,7 +1,7 @@
 ﻿using Unity.Entities;
 
 /*
- * Decreases Lifetime of entities and destroys entities with depleted Lifetime
+ * Decreases Lifetime of entities and destroys entities Lifetime reaches 0
  */
 public partial class LifetimeSystem : SystemBase
 {
@@ -14,17 +14,20 @@ public partial class LifetimeSystem : SystemBase
 
     protected override void OnUpdate()
     {
-        var ecb = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter();
+        var commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter();
         float deltaTime = Time.DeltaTime;
 
         Entities
-            .ForEach((Entity entity, int entityInQueryIndex, ref Lifetime lifetime) =>
+            .ForEach((
+                Entity entity, 
+                int entityInQueryIndex, 
+                ref Lifetime lifetime) =>
             {
                 lifetime.Value -= deltaTime;
 
                 if (lifetime.Value <= 0)
                 {
-                    ecb.DestroyEntity(entityInQueryIndex, entity);
+                    commandBuffer.DestroyEntity(entityInQueryIndex, entity);
                 }
 
             }).ScheduleParallel();

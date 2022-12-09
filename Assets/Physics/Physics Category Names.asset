@@ -18,8 +18,8 @@ MonoBehaviour:
   - PlayerBullets
   - EnemyBullets
   - UFOs
-  - 
-  - 
+  - PowerUps
+  - Shield
   - 
   - 
   - 

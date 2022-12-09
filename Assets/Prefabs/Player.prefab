@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 3917036504150025888}
   - component: {fileID: -6564736344004471920}
-  - component: {fileID: 8012925656926872043}
   - component: {fileID: 3917036504150025891}
   - component: {fileID: 3917036504150025892}
   - component: {fileID: 3917036504150025947}
@@ -52,25 +51,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 71c3eac0e543f444fb471863c105307d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &8012925656926872043
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3917036504150025893}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59f5180828c35ce43bb5e4d1bd2c0f93, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  BulletSpeed: 15
-  SpawnOffset:
-    x: 0
-    y: 0.4
-    z: 0
-  AmountPerSecond: 3
-  ElapsedTimeSinceLast: 0
 --- !u!114 &3917036504150025891
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -100,7 +80,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 78bc379aa0104cf468db8172935456f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Acceleration: 4
+  Acceleration: 5
   MaxSpeed: 15
 --- !u!114 &3917036504150025947
 MonoBehaviour:

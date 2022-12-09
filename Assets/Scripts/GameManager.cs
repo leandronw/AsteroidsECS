@@ -3,104 +3,127 @@ using Unity.Entities;
 using Unity.Transforms;
 using Unity.Collections;
 using Unity.Mathematics;
-using Unity.Rendering;
-using UnityEngine.Rendering;
-using Unity.Jobs;
 using Unity.Physics;
-using Unity.Burst;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System;
 
+/*
+ * Handles game rules, collisions and spawning of entities
+ */
 public class GameManager : MonoBehaviour
 {
+    public enum GameState
+    {
+        INIT,
+        STARTING_GAME,
+        STARTING_LEVEL,
+        RUNNING,
+        GAME_OVER,
+        DESTROYED,
+    }
+
+
+    // Delegates
+    public event Action OnGameStarted;
+    public event Action OnGameEnded;
+    public event Action<uint> OnLivesChanged;
+
+    // Inspector variables
     [SerializeField] private float _delayBeforeNextLevel;
     [SerializeField] private float _delayBeforeRespawn;
 
-    private bool _isGameRunning;
-    private bool _isGameOver;
+    // Game logic
+    private GameState _state = GameState.INIT;
     private uint _currentLevel;
     private uint _playerLives;
-    private Entity _player1Entity;
 
+    // ECS references
+    private Entity _player1Entity;
     private World _world;
-    private EntityCommandBufferSystem _ecbSystem;
+    private BeginInitializationEntityCommandBufferSystem _entityCommandBufferSystem;
     private EntityManager _entityManager;
 
+    // EntityQueries
     private EntityQuery _allGameEntitiesQuery;
-    private EntityQuery _allAsteroidsQuery;
-    private EntityQuery _playerCollidedQuery;
-    private EntityQuery _asteroidsCollidedQuery;
-    private EntityQuery _bulletsCollidedQuery;
+    private EntityQuery _anyAsteroidLeftQuery;
 
-    private Dictionary<AsteroidType, Entity> _asteroidPrefabs = new Dictionary<AsteroidType, Entity>();
+    // Prefabs
+    private Entity _playerPrefab;
+    private List<Entity> _powerUpPrefabs = new List<Entity>();
+
 
     void Start()
     {
         _world = World.DefaultGameObjectInjectionWorld;
-        _ecbSystem = _world.GetOrCreateSystem<BeginInitializationEntityCommandBufferSystem>();
+        _entityCommandBufferSystem = _world.GetOrCreateSystem<BeginInitializationEntityCommandBufferSystem>();
         _entityManager = _world.EntityManager;
 
         _allGameEntitiesQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
         {
             Any = new ComponentType[] {
                 typeof(PlayerTag),
-                typeof(AsteroidTypeData),
-                typeof(BulletTag)}
-        });
-
-        _allAsteroidsQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
-        {
-            All = new ComponentType[] {
-                typeof(AsteroidTypeData)}
-        });
-
-        _playerCollidedQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
-        {
-            All = new ComponentType[] {
-                typeof(PlayerTag),
-                typeof(CollidedTag)}
-        });
-
-
-        _asteroidsCollidedQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
-        {
-            All = new ComponentType[] {
-                typeof(AsteroidTypeData),
-                typeof(PhysicsVelocity),
-                typeof(Translation),
-                typeof(CollidedTag)}
-        });
-
-        _bulletsCollidedQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
-        {
-            All = new ComponentType[] {
+                typeof(AsteroidSizeComponent),
                 typeof(BulletTag),
-                typeof(Translation),
-                typeof(CollidedTag)}
+                typeof(ShieldPowerUpTag),
+                typeof(WeaponPowerUpTag)}
         });
 
-        _asteroidPrefabs[AsteroidType.Big] = _ecbSystem.GetSingleton<AsteroidBigPrefabReference>().Prefab;
-        _asteroidPrefabs[AsteroidType.Medium] = _ecbSystem.GetSingleton<AsteroidMediumPrefabReference>().Prefab;
-        _asteroidPrefabs[AsteroidType.Small] = _ecbSystem.GetSingleton<AsteroidSmallPrefabReference>().Prefab;
+        _anyAsteroidLeftQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
+        {
+            Any = new ComponentType[] {
+                typeof(AsteroidSizeComponent),
+                typeof(AsteroidSpawnRequest)}
+        });
 
-        StartNewGame();
+        _playerPrefab = _entityCommandBufferSystem.GetSingleton<PlayerPrefabReference>().Prefab;
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpBluePrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpRedPrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpYellowPrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpGreenPrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpBluePrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpRedPrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpYellowPrefabReference>().Prefab);
+        _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpGreenPrefabReference>().Prefab);
+
+
+        CollisionHandlingSystem collisionsSystem = _world.GetOrCreateSystem<CollisionHandlingSystem>();
+        collisionsSystem.OnPlayerDestroyed += PlayerDied;
+        collisionsSystem.OnPowerUpPicked += PowerUpPicked;
+        collisionsSystem.OnAsteroidDestroyed += AsteroidDestroyed;
+
+        ShieldDepleteSystem shieldDepleteSystem = _world.GetOrCreateSystem<ShieldDepleteSystem>();
+        shieldDepleteSystem.OnShieldDepleted += ShieldDepleted;
+
+        ShieldEnableSystem shieldEnableSystem = _world.GetOrCreateSystem<ShieldEnableSystem>();
+        shieldEnableSystem.OnShieldEnabled += ShieldEnabled;
+
+        HyperspaceSystem hyperspaceSystem = _world.GetOrCreateSystem<HyperspaceSystem>();
+        hyperspaceSystem.OnHyperspace += JumpedIntoHyperspace;
     }
 
     private void Update()
     {
-        if (_isGameRunning)
+        switch (_state)
         {
-            CheckEntitiesCollided();
-            CheckHyperspaceTravel(_player1Entity);
-            CheckThrusting();
-        }
-        else if (_isGameOver)
-        {
-            if (Input.GetKeyDown(KeyCode.Space))
-            {
+            case GameState.INIT: 
                 StartNewGame();
-            }
+                break;
+            case GameState.RUNNING: 
+                CheckLevelCompleted();
+                break;
+            case GameState.GAME_OVER:
+                if (Input.GetKeyDown(KeyCode.Space)) // restart by pressing spacebar
+                {
+                    StartNewGame();
+                }
+                break;
         }
+    }
+
+    private void OnDestroy()
+    {
+        _state = GameState.DESTROYED;
     }
 
     private void CleanupPreviousGame()
@@ -112,42 +135,93 @@ public class GameManager : MonoBehaviour
     {
         CleanupPreviousGame();
 
-        _isGameRunning = false;
-        _isGameOver = false;
+        _state = GameState.STARTING_GAME;
         _currentLevel = 0;
         _playerLives = 3;
 
+        OnLivesChanged?.Invoke(_playerLives);
+
         // TO DO: Show countdown
 
+        if (_state != GameState.STARTING_GAME)
+            return;
+
         SpawnPlayer();
-        StartNextLevel();
-        _isGameRunning = true;
+        await StartNextLevel();
+
+        _state = GameState.RUNNING;
+
+        OnGameStarted?.Invoke();
     }
 
     private void GameOver()
     {
-        _isGameRunning = false;
-        _isGameOver = true;
+        _state = GameState.GAME_OVER;
 
-        // TO DO: show UI
+        OnGameEnded?.Invoke();
+
+        Debug.Log("GAME OVER :(");
     }
 
     private void SpawnPlayer()
     {
-        _player1Entity = _entityManager.Instantiate(_ecbSystem.GetSingleton<PlayerPrefabReference>().Prefab);
+        _player1Entity = _entityManager.Instantiate(_playerPrefab);
+        
+        // dynamic buffer for linking children so they destroy when player dies 
+        _entityManager.AddBuffer<LinkedEntityGroup>(_player1Entity); 
     }
 
-    private void PlayerDied(Entity playerEntity)
+    private void SpawnPowerUp()
+    {
+        if (_powerUpPrefabs.Count == 0)
+        {
+            Debug.LogError("PowerUp prefabs not found");
+            return;
+        }
+
+        Entity randomPrefab = _powerUpPrefabs[UnityEngine.Random.Range(0, _powerUpPrefabs.Count)];
+        float2 randomPosition = GameArea.GetRandomPosition();
+
+        Debug.Log("powerup random position: " + randomPosition);
+       
+        Entity powerUpEntity = _entityManager.Instantiate(randomPrefab);
+        _entityManager.SetComponentData<Translation>(
+            powerUpEntity,
+            new Translation
+            {
+                Value = new float3(randomPosition.x, randomPosition.y, 0f)
+            });
+    }
+
+    private void PowerUpPicked(float2 position)
+    {
+        Debug.Log("Powerup picked!");
+        // TO DO: show VFX
+    }
+
+    private void ShieldEnabled(float time)
+    {
+        Debug.Log($"Shield enabled for {time} seconds");
+    }
+
+    private void ShieldDepleted()
+    {
+        Debug.Log($"Shield depleted");
+    }
+
+    private void AsteroidDestroyed(float2 position, AsteroidSize size)
+    {
+        // TO DO: add score
+        // TO DO: show VFX
+    }
+
+    private void PlayerDied(float2 position)
     {
         Debug.Log("Player died!");
 
         // TO DO: show death VFX
 
-        _playerLives--;
-
-        // TO DO: update UI
-
-        if (_playerLives > 0)
+        if (_playerLives > 1)
         {
             RespawnPlayer();
         }
@@ -160,173 +234,80 @@ public class GameManager : MonoBehaviour
     {
         await Task.Delay((int)_delayBeforeRespawn * 1000); // wait "_delayBeforeRespawn" seconds before respawning
 
+        if (_state == GameState.DESTROYED) 
+            return;
+
+        _playerLives--;
+        OnLivesChanged?.Invoke(_playerLives);
+
         SpawnPlayer();
     }
 
-
-    private async void StartNextLevel(float delay = 0f)
+  
+    private async Task StartNextLevel(float delay = 0f)
     {
+        _state = GameState.STARTING_LEVEL;
         _currentLevel++;
+
         Debug.Log($"Starting level {_currentLevel}!");
 
         uint asteroidsAmount = _currentLevel * 2 + 2;
+        uint powerUpsAmount = _currentLevel + 1;
 
         await Task.Delay((int)(delay * 1000)); // wait "delay" seconds before starting
+
+        if (_state != GameState.STARTING_LEVEL)
+            return;
 
         float2 playerPosition = GetPlayerPosition(_player1Entity);
 
         for (int i = 0; i < asteroidsAmount; i++)
         {
-            SpawnAsteroids(
-                prefab: _asteroidPrefabs[AsteroidType.Big],
-                amount: 1,
-                position: GetRandomPositionFarFromPlayer(playerPosition, 5f),
-                previousVelocity: float2.zero);
-        }     
+            SpawnAsteroid(position: GameArea.GetRandomPositionFarFromPlayer(playerPosition, 5f));
+        }
+
+        for (int i = 0; i < powerUpsAmount; i++)
+        {
+            SpawnPowerUp();
+        }
     }
 
-    private void SpawnAsteroids(
-        Entity prefab,
-        uint amount,
-        float2 position,
-        float2 previousVelocity)
+    private void SpawnAsteroid(float2 position)
     {
         Entity spawnerEntity = _entityManager.CreateEntity();
-        _entityManager.AddComponentData<AsteroidSpawnRequestData>(
+        _entityManager.AddComponentData<AsteroidSpawnRequest>(
             spawnerEntity,
-            new AsteroidSpawnRequestData
+            new AsteroidSpawnRequest
             {
-                Amount = amount,
+                Amount = 1,
                 Position = position,
-                PreviousVelocity = previousVelocity,
-                Prefab = prefab
+                PreviousVelocity = float3.zero,
+                Size = AsteroidSize.Big
             });
     }
 
-    private void CheckHyperspaceTravel(Entity playerEntity)
-    {
-        if (_entityManager.HasComponent<JumpToHyperspaceTag>(playerEntity))
-        {
-            DoHyperspaceTravel(playerEntity);
-        }
-    }
 
-    private void DoHyperspaceTravel(Entity playerEntity)
+    private void JumpedIntoHyperspace(float2 previousPosition, float2 newPosition)
     {
-        if (!_entityManager.HasComponent<Translation>(playerEntity))
-        {
-            return; // player entity is not valid
-        }
-
         Debug.Log("Player went through HYPERSPACE");
 
-        Translation oldPosition = _entityManager.GetComponentData<Translation>(playerEntity);
-
-        // TO DO: show VFX
-
-        float2 newPosition = GetRandomPosition();
-        _entityManager.SetComponentData<Translation>(
-            playerEntity,
-            new Translation
-            {
-                Value = new float3(newPosition.x, newPosition.y, 0f)
-            });
-        _entityManager.RemoveComponent(playerEntity, typeof(JumpToHyperspaceTag));
-
         // TO DO: show VFX
     }
 
-    private void CheckEntitiesCollided()
+    private async void CheckLevelCompleted()
     {
-        CheckPlayerCollided(_player1Entity);
-        CheckAsteroidsCollided();
-        CheckBulletsCollided();
-    }
-
-    private void CheckPlayerCollided(Entity playerEntity)
-    {
-        if (_playerCollidedQuery.Matches(playerEntity))
+        if (_anyAsteroidLeftQuery.IsEmpty)
         {
-            PlayerDied(playerEntity);
+            await StartNextLevel(_delayBeforeNextLevel);
+
+            _state = GameState.RUNNING;
         }
-
-        _entityManager.DestroyEntity(_playerCollidedQuery);
-    }
-
-    private void CheckAsteroidsCollided()
-    {
-        bool newAsteroidsSpawned = false;
-        bool anyAsteroidCollided = false;
-
-        if (!_asteroidsCollidedQuery.IsEmpty)
-        {
-            anyAsteroidCollided = true;
-
-            var velocities = _asteroidsCollidedQuery.ToComponentDataArray<PhysicsVelocity>(Allocator.Temp);
-            var positions = _asteroidsCollidedQuery.ToComponentDataArray<Translation>(Allocator.Temp);
-            var asteroidTypes = _asteroidsCollidedQuery.ToComponentDataArray<AsteroidTypeData>(Allocator.Temp);
-
-            for (int i = 0; i < asteroidTypes.Length; i++)
-            {
-                AsteroidType type = asteroidTypes[i].type;
-                Entity prefab = Entity.Null;
-                switch (type)
-                {
-                    case AsteroidType.Big:
-                        prefab = _asteroidPrefabs[AsteroidType.Medium];
-                        break;
-                    case AsteroidType.Medium:
-                        prefab = _asteroidPrefabs[AsteroidType.Small];
-                        break;
-                    default:
-                        break;
-                }
-
-                if (prefab != Entity.Null)
-                {
-                    newAsteroidsSpawned = true;
-
-                    SpawnAsteroids(
-                        prefab: prefab,
-                        amount: (uint)UnityEngine.Random.Range(2, 4),
-                        position: positions[i].Value.xy,
-                        previousVelocity: velocities[i].Linear.xy);
-                }
-            }
-        }
-
-        // TO DO: add score
-        // TO DO: show VFX
-
-        _entityManager.DestroyEntity(_asteroidsCollidedQuery);
-
-        if (anyAsteroidCollided && !newAsteroidsSpawned && _allAsteroidsQuery.IsEmpty)
-        {
-            StartNextLevel(_delayBeforeNextLevel);
-        }
-    }
-
-    private void CheckBulletsCollided()
-    {
-        if (!_bulletsCollidedQuery.IsEmpty)
-        {
-            var positions = _bulletsCollidedQuery.ToComponentDataArray<Translation>(Allocator.Temp);
-            // TO DO: show VFX
-
-            _entityManager.DestroyEntity(_bulletsCollidedQuery);
-        }
-    }
-
-    private void CheckThrusting()
-    {
-        bool isP1Thrusting = _entityManager.HasComponent<ThrustingTag>(_player1Entity);
-
-        // TO DO: show or hide VFX
     }
 
     private float2 GetPlayerPosition(Entity playerEntity)
     {
-        if (_entityManager.HasComponent<Translation>(playerEntity))
+        if (_entityManager.Exists(playerEntity) &&
+            _entityManager.HasComponent<Translation>(playerEntity))
         {
             Translation playerPosition = _entityManager.GetComponentData<Translation>(playerEntity);
             return playerPosition.Value.xy;
@@ -336,28 +317,4 @@ public class GameManager : MonoBehaviour
             return float2.zero;
         }
     }
-
-    private float2 GetRandomPosition()
-    {
-        GameArea gameArea = GameArea.Instance;
-        float2 randomPosition = new float2(
-            UnityEngine.Random.Range(gameArea.LeftEdge, gameArea.RightEdge),
-            UnityEngine.Random.Range(gameArea.BottomEdge, gameArea.TopEdge));
-
-        return randomPosition;
-    }
-
-    private float2 GetRandomPositionFarFromPlayer(float2 playerPosition, float threshold)
-    {
-        GameArea gameArea = GameArea.Instance;
-        float2 randomPosition = GetRandomPosition();
-        
-        if (math.distance(playerPosition, randomPosition) < threshold)
-        {
-            randomPosition.x += gameArea.Width * 0.5f;
-        }
-
-        return randomPosition;
-    }
-
 }

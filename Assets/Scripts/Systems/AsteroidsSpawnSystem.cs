@@ -10,44 +10,69 @@ using Unity.Transforms;
 using UnityEngine.PlayerLoop;
 
 /*
- * Gathers all AsteroidSpawnRequestData components and spawn the required entities 
+ * Spawns new asteroids from all AsteroidSpawnRequest's
  */
-[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
-
+[UpdateInGroup(typeof(InitializationSystemGroup))]
 public partial class AsteroidsSpawnSystem : SystemBase
 {
     private BeginSimulationEntityCommandBufferSystem _entityCommandBufferSystem;
-    private EntityQuery _query;
+
+    private NativeArray<Entity> _asteroidPrefabs;
 
     protected override void OnCreate()
     {
         _entityCommandBufferSystem = World.GetOrCreateSystem<BeginSimulationEntityCommandBufferSystem>();
-        _query = GetEntityQuery(ComponentType.ReadWrite<AsteroidSpawnRequestData>());
+
+        _asteroidPrefabs = new NativeArray<Entity>(3, Allocator.Persistent);  
+    }
+
+    protected override void OnStartRunning()
+    {
+        _asteroidPrefabs[(int)AsteroidSize.Big] = _entityCommandBufferSystem.GetSingleton<AsteroidBigPrefabReference>().Prefab;
+        _asteroidPrefabs[(int)AsteroidSize.Medium] = _entityCommandBufferSystem.GetSingleton<AsteroidMediumPrefabReference>().Prefab;
+        _asteroidPrefabs[(int)AsteroidSize.Small] = _entityCommandBufferSystem.GetSingleton<AsteroidSmallPrefabReference>().Prefab;
+    }
+
+    protected override void OnDestroy()
+    {
+        _asteroidPrefabs.Dispose();
     }
 
     protected override void OnUpdate()
     {
         EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
+        NativeArray<Entity> prefabs = _asteroidPrefabs;
 
         Entities
-            .WithStoreEntityQueryInField(ref _query)
-            .ForEach((in AsteroidSpawnRequestData spawnData) => {
-                for (int i = 0; i < spawnData.Amount; i++)
+            .ForEach((
+                Entity spawnEntity,
+                in AsteroidSpawnRequest spawnRequest) => 
+            {
+                for (int i = 0; i < spawnRequest.Amount; i++)
                 {
-                    Entity entity = commandBuffer.Instantiate(spawnData.Prefab);
+                    Entity entity = commandBuffer.Instantiate(prefabs[(int)spawnRequest.Size]);
 
                     commandBuffer.SetComponent(
                         entity,
                         new Translation
                         {
-                            Value = new float3(spawnData.Position.x, spawnData.Position.y, 0)
+                            Value = new float3(spawnRequest.Position.x, spawnRequest.Position.y, 0)
+                        });
+
+                    commandBuffer.SetComponent(
+                        entity,
+                        new PhysicsVelocity
+                        {
+                            Linear = spawnRequest.PreviousVelocity
                         });
 
                     commandBuffer.AddComponent<NeedsInitTag>(entity, default(NeedsInitTag));
                 }
+
+                commandBuffer.DestroyEntity(spawnEntity);
+
             }).Run();
 
-        commandBuffer.DestroyEntitiesForEntityQuery(_query);
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
     }
 }
