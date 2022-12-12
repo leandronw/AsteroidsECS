@@ -13,17 +13,7 @@ using UnityEngine.UIElements;
  * */
 public partial class WrapAroundEdgesSystem : SystemBase
 {
-    private EntityQuery _query;
 
-    private const float MARGIN = 0.5f;
-
-    protected override void OnCreate()
-    {
-        _query = EntityManager.CreateEntityQuery(
-            ComponentType.ReadWrite<Translation>(),
-            ComponentType.ReadOnly<WrapAroundEdgesTag>(),
-            ComponentType.ReadOnly<PhysicsVelocity>());
-    }
 
     protected override void OnUpdate()
     {
@@ -31,12 +21,12 @@ public partial class WrapAroundEdgesSystem : SystemBase
 
         new WrapAroundEdgesJob()
         {
-            BottomEdge = gameArea.BottomEdge - MARGIN,
-            TopEdge = gameArea.TopEdge + MARGIN,
-            LeftEdge = gameArea.LeftEdge - MARGIN,
-            RightEdge = gameArea.RightEdge + MARGIN
+            BottomEdge = gameArea.BottomEdge,
+            TopEdge = gameArea.TopEdge,
+            LeftEdge = gameArea.LeftEdge,
+            RightEdge = gameArea.RightEdge
         }
-        .ScheduleParallel(_query);
+        .ScheduleParallel();
     }
 }
 
@@ -48,24 +38,30 @@ public partial struct WrapAroundEdgesJob : IJobEntity
     public float LeftEdge;
     public float RightEdge;
 
-    void Execute(ref Translation translation, in PhysicsVelocity velocity)
+    void Execute(ref Translation translation, in PhysicsVelocity velocity, in WrapAroundEdgesComponent wrapData)
     {
-        if (translation.Value.x < LeftEdge && velocity.Linear.x < 0)
+        float margin = wrapData.objectSize / 2;
+        float thisBottomEdge = BottomEdge - margin;
+        float thisTopEdge = TopEdge + margin;
+        float thisLeftEdge = LeftEdge - margin;
+        float thisRightEdge = RightEdge + margin;
+
+        if (translation.Value.x < thisLeftEdge && velocity.Linear.x < 0)
         {
-            translation.Value.x = RightEdge;
+            translation.Value.x = thisRightEdge;
         }
-        else if (translation.Value.x > RightEdge && velocity.Linear.x > 0)
+        else if (translation.Value.x > thisRightEdge && velocity.Linear.x > 0)
         {
-            translation.Value.x = LeftEdge;
+            translation.Value.x = thisLeftEdge;
         }
 
-        if (translation.Value.y < BottomEdge && velocity.Linear.y < 0)
+        if (translation.Value.y < thisBottomEdge && velocity.Linear.y < 0)
         {
-            translation.Value.y = TopEdge;
+            translation.Value.y = thisTopEdge;
         }
-        else if (translation.Value.y > TopEdge && velocity.Linear.y > 0)
+        else if (translation.Value.y > thisTopEdge && velocity.Linear.y > 0)
         {
-            translation.Value.y = BottomEdge;
+            translation.Value.y = thisBottomEdge;
         }
     }
 }

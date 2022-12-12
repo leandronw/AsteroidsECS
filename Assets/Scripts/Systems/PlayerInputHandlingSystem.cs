@@ -11,7 +11,7 @@ using UnityEngine;
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 [UpdateAfter(typeof(UpdateWorldTimeSystem))]
-public partial class PlayerInputSystem : SystemBase
+public partial class PlayerInputHandlingSystem : SystemBase
 {
     private Entity _bulletPrefab;
     private EntityCommandBufferSystem _entityCommandBufferSystem;

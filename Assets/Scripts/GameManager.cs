@@ -27,16 +27,23 @@ public class GameManager : MonoBehaviour
     // Delegates
     public event Action OnGameStarted;
     public event Action OnGameEnded;
-    public event Action<uint> OnLivesChanged;
+    public event Action<int> OnLivesChanged;
+    public event Action<float> OnCountdownStarted;
 
     // Inspector variables
+    [SerializeField] private float _countdownTime;
     [SerializeField] private float _delayBeforeNextLevel;
     [SerializeField] private float _delayBeforeRespawn;
+    [SerializeField] private float _minUfoInterval;
+    [SerializeField] private float _maxUfoInterval;
+    [SerializeField] private float _ufoIntervalDecrease;
 
     // Game logic
     private GameState _state = GameState.INIT;
-    private uint _currentLevel;
-    private uint _playerLives;
+    private int _currentLevel;
+    private int _playerLives;
+    private float _currentUfoInterval;
+    private float _currentUfoTimer;
 
     // ECS references
     private Entity _player1Entity;
@@ -46,11 +53,15 @@ public class GameManager : MonoBehaviour
 
     // EntityQueries
     private EntityQuery _allGameEntitiesQuery;
-    private EntityQuery _anyAsteroidLeftQuery;
+    private EntityQuery _anyEnemiesLeftQuery;
 
     // Prefabs
     private Entity _playerPrefab;
+    private Entity _ufoPrefab;
     private List<Entity> _powerUpPrefabs = new List<Entity>();
+
+    // Config
+    private PlayerKeyboardData _player1KeyboardConfig;
 
 
     void Start()
@@ -66,17 +77,20 @@ public class GameManager : MonoBehaviour
                 typeof(AsteroidSizeComponent),
                 typeof(BulletTag),
                 typeof(ShieldPowerUpTag),
-                typeof(WeaponPowerUpTag)}
+                typeof(WeaponPowerUpTag),
+                typeof(UFOTag)}
         });
 
-        _anyAsteroidLeftQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
+        _anyEnemiesLeftQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
         {
             Any = new ComponentType[] {
                 typeof(AsteroidSizeComponent),
-                typeof(AsteroidSpawnRequest)}
+                typeof(AsteroidSpawnRequest),
+                typeof(UFOTag)}
         });
 
         _playerPrefab = _entityCommandBufferSystem.GetSingleton<PlayerPrefabReference>().Prefab;
+        _ufoPrefab = _entityCommandBufferSystem.GetSingleton<UFOPrefabReference>().Prefab;
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpBluePrefabReference>().Prefab);
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpRedPrefabReference>().Prefab);
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpYellowPrefabReference>().Prefab);
@@ -89,17 +103,15 @@ public class GameManager : MonoBehaviour
 
         CollisionHandlingSystem collisionsSystem = _world.GetOrCreateSystem<CollisionHandlingSystem>();
         collisionsSystem.OnPlayerDestroyed += PlayerDied;
+        collisionsSystem.OnUFODestroyed += UFODestroyed;
         collisionsSystem.OnPowerUpPicked += PowerUpPicked;
         collisionsSystem.OnAsteroidDestroyed += AsteroidDestroyed;
 
-        ShieldDepleteSystem shieldDepleteSystem = _world.GetOrCreateSystem<ShieldDepleteSystem>();
-        shieldDepleteSystem.OnShieldDepleted += ShieldDepleted;
-
-        ShieldEnableSystem shieldEnableSystem = _world.GetOrCreateSystem<ShieldEnableSystem>();
-        shieldEnableSystem.OnShieldEnabled += ShieldEnabled;
-
         HyperspaceSystem hyperspaceSystem = _world.GetOrCreateSystem<HyperspaceSystem>();
         hyperspaceSystem.OnHyperspace += JumpedIntoHyperspace;
+
+        var player1KeyboardConfigEntity = _entityCommandBufferSystem.GetSingletonEntity<Player1KeyboardConfigTag>();
+        _player1KeyboardConfig = _entityManager.GetComponentData<PlayerKeyboardData>(player1KeyboardConfigEntity);
     }
 
     private void Update()
@@ -109,7 +121,8 @@ public class GameManager : MonoBehaviour
             case GameState.INIT: 
                 StartNewGame();
                 break;
-            case GameState.RUNNING: 
+            case GameState.RUNNING:
+                CheckSpawnUFO();
                 CheckLevelCompleted();
                 break;
             case GameState.GAME_OVER:
@@ -139,13 +152,19 @@ public class GameManager : MonoBehaviour
         _currentLevel = 0;
         _playerLives = 3;
 
+        _currentUfoInterval = _maxUfoInterval;
+        _currentUfoTimer = 0f;
+
         OnLivesChanged?.Invoke(_playerLives);
 
-        // TO DO: Show countdown
+        OnCountdownStarted?.Invoke(_countdownTime);
+        await Task.Delay((int)(_countdownTime * 1000f));
 
         if (_state != GameState.STARTING_GAME)
             return;
 
+
+        OnLivesChanged?.Invoke(_playerLives - 1);
         SpawnPlayer();
         await StartNextLevel();
 
@@ -166,9 +185,41 @@ public class GameManager : MonoBehaviour
     private void SpawnPlayer()
     {
         _player1Entity = _entityManager.Instantiate(_playerPrefab);
+        _entityManager.AddComponentData<PlayerKeyboardData>(_player1Entity, _player1KeyboardConfig);
         
         // dynamic buffer for linking children so they destroy when player dies 
         _entityManager.AddBuffer<LinkedEntityGroup>(_player1Entity); 
+    }
+
+    private void SpawnUFO()
+    {
+        Entity ufoEntity = _entityManager.Instantiate(_ufoPrefab);
+
+        bool fromLeftToRight = UnityEngine.Random.value < 0.5f;
+        float yPosition = UnityEngine.Random.Range(GameArea.Instance.BottomEdge, GameArea.Instance.TopEdge);
+        float speed = _entityManager.GetComponentData<UFOSpeedData>(_ufoPrefab).Speed;
+
+        float3 position = new float3(
+            fromLeftToRight ? GameArea.Instance.LeftEdge : GameArea.Instance.RightEdge,
+            yPosition,
+            0f);
+
+        _entityManager.AddComponentData<Translation>(
+            ufoEntity, 
+            new Translation
+            {
+                Value = position
+            });
+
+        _entityManager.AddComponentData<PhysicsVelocity>(
+            ufoEntity,
+            new PhysicsVelocity
+            {
+                Linear = new float3(
+                    fromLeftToRight ? speed : -speed,
+                    0f, 0f),
+                Angular = new float3(0f, 0f, 1f)
+            });
     }
 
     private void SpawnPowerUp()
@@ -181,9 +232,7 @@ public class GameManager : MonoBehaviour
 
         Entity randomPrefab = _powerUpPrefabs[UnityEngine.Random.Range(0, _powerUpPrefabs.Count)];
         float2 randomPosition = GameArea.GetRandomPosition();
-
-        Debug.Log("powerup random position: " + randomPosition);
-       
+ 
         Entity powerUpEntity = _entityManager.Instantiate(randomPrefab);
         _entityManager.SetComponentData<Translation>(
             powerUpEntity,
@@ -199,15 +248,12 @@ public class GameManager : MonoBehaviour
         // TO DO: show VFX
     }
 
-    private void ShieldEnabled(float time)
+    private void UFODestroyed(float2 position)
     {
-        Debug.Log($"Shield enabled for {time} seconds");
+        // TO DO: add score
+        // TO DO: show VFX
     }
 
-    private void ShieldDepleted()
-    {
-        Debug.Log($"Shield depleted");
-    }
 
     private void AsteroidDestroyed(float2 position, AsteroidSize size)
     {
@@ -232,13 +278,13 @@ public class GameManager : MonoBehaviour
     }
     private async void RespawnPlayer()
     {
-        await Task.Delay((int)_delayBeforeRespawn * 1000); // wait "_delayBeforeRespawn" seconds before respawning
+        await Task.Delay((int)(_delayBeforeRespawn * 1000)); // wait "_delayBeforeRespawn" seconds before respawning
 
         if (_state == GameState.DESTROYED) 
             return;
 
         _playerLives--;
-        OnLivesChanged?.Invoke(_playerLives);
+        OnLivesChanged?.Invoke(_playerLives - 1);
 
         SpawnPlayer();
     }
@@ -251,8 +297,8 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"Starting level {_currentLevel}!");
 
-        uint asteroidsAmount = _currentLevel * 2 + 2;
-        uint powerUpsAmount = _currentLevel + 1;
+        int asteroidsAmount = _currentLevel * 2 + 2;
+        int powerUpsAmount = _currentLevel + 1;
 
         await Task.Delay((int)(delay * 1000)); // wait "delay" seconds before starting
 
@@ -294,9 +340,21 @@ public class GameManager : MonoBehaviour
         // TO DO: show VFX
     }
 
+    private void CheckSpawnUFO()
+    {
+        _currentUfoTimer += Time.deltaTime;
+        if (_currentUfoTimer >= _currentUfoInterval)
+        {
+            _currentUfoInterval -= _ufoIntervalDecrease;
+            if (_currentUfoInterval < _minUfoInterval) { _currentUfoInterval = _minUfoInterval; }
+            _currentUfoTimer = 0f;
+            SpawnUFO();
+        }
+    }
+
     private async void CheckLevelCompleted()
     {
-        if (_anyAsteroidLeftQuery.IsEmpty)
+        if (_anyEnemiesLeftQuery.IsEmpty)
         {
             await StartNextLevel(_delayBeforeNextLevel);
 

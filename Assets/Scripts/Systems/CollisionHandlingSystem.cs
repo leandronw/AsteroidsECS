@@ -23,6 +23,7 @@ public partial class CollisionHandlingSystem : SystemBase
 {
     // delegates
     public event Action<float2> OnPlayerDestroyed;
+    public event Action<float2> OnUFODestroyed;
     public event Action<float2> OnPowerUpPicked;
     public event Action<float2, AsteroidSize> OnAsteroidDestroyed;
 
@@ -45,33 +46,24 @@ public partial class CollisionHandlingSystem : SystemBase
         });
         NativeArray<Entity> allPowerupEntities = allPowerupsQuery.ToEntityArray(Allocator.TempJob);
 
-        EntityQuery allAsteroidsQuery = GetEntityQuery(new EntityQueryDesc
-        {
-            All = new ComponentType[] {
-                typeof(AsteroidSizeComponent)},
-            None = new ComponentType[] {
-                typeof(DestroyedTag)}
-        });
-        NativeArray<Entity> allAsteroidEntities = allAsteroidsQuery.ToEntityArray(Allocator.TempJob);
-
         EntityQuery shieldedQuery = GetEntityQuery(typeof(PlayerTag), typeof(ShieldData));
         NativeArray<Entity> shieldedPlayers = shieldedQuery.ToEntityArray(Allocator.TempJob);
 
         EntityCommandBuffer.ParallelWriter commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter();
-        
-        JobHandle bulletsJobHandle = Entities
-            .WithNone<DestroyedTag>()
-            .ForEach((
-                Entity bulletEntity,
-                int entityInQueryIndex,
-                in BulletTag bulletTag,
-                in CollisionData collision
-                ) =>
-            {
-                // bullets are just destroyed
-                commandBuffer.DestroyEntity(entityInQueryIndex, bulletEntity);
 
-            }).ScheduleParallel(this.Dependency);
+
+        JobHandle bulletsJobHandle = new HandleBulletsJob()
+        {
+            CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
+
+        }.ScheduleParallel(this.Dependency);
+
+
+        JobHandle ufosJobHandle = new HandleUFOJob()
+        {
+            CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
+
+        }.ScheduleParallel(this.Dependency);
 
 
         JobHandle asteroidsJobHandle = new HandleAsteroidJob()
@@ -80,18 +72,19 @@ public partial class CollisionHandlingSystem : SystemBase
 
         }.ScheduleParallel(this.Dependency);
 
+
         JobHandle playersJobHandle = new HandlePlayerJob()
         {
-            AllAsteroids = allAsteroidEntities,
             AllPowerups = allPowerupEntities,
             AllShieldedPlayers = shieldedPlayers,
             CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
 
         }.ScheduleParallel(this.Dependency);
 
-
-        JobHandle intermediateDependencies = JobHandle.CombineDependencies(bulletsJobHandle, asteroidsJobHandle);
-        this.Dependency = JobHandle.CombineDependencies(intermediateDependencies, playersJobHandle);
+        this.Dependency = JobHandle.CombineDependencies(this.Dependency, bulletsJobHandle);
+        this.Dependency = JobHandle.CombineDependencies(this.Dependency, ufosJobHandle);
+        this.Dependency = JobHandle.CombineDependencies(this.Dependency, asteroidsJobHandle);
+        this.Dependency = JobHandle.CombineDependencies(this.Dependency, playersJobHandle);
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
 
 
@@ -108,6 +101,15 @@ public partial class CollisionHandlingSystem : SystemBase
                 eventsCommandBuffer.DestroyEntity(eventEntity);
 
             }).Run();
+
+        Entities
+          .WithoutBurst()
+          .ForEach((Entity eventEntity, ref UFODestroyedEvent eventComponent) =>
+          {
+              OnUFODestroyed?.Invoke(eventComponent.Position);
+              eventsCommandBuffer.DestroyEntity(eventEntity);
+
+          }).Run();
 
         Entities
             .WithoutBurst()
@@ -129,13 +131,46 @@ public partial class CollisionHandlingSystem : SystemBase
 
     }
 
+    [BurstCompile]
+    partial struct HandleBulletsJob : IJobEntity
+    {
+        [WriteOnly] public EntityCommandBuffer.ParallelWriter CommandBuffer;
+
+        public void Execute(
+            Entity bulletEntity,
+            [EntityInQueryIndex] int entityInQueryIndex,
+            in BulletTag bulletTag,
+            in CollisionData collision
+            )
+        {
+            // bullets are just destroyed
+            CommandBuffer.DestroyEntity(entityInQueryIndex, bulletEntity);
+        }
+    }
+
+    [BurstCompile]
+    partial struct HandleUFOJob : IJobEntity
+    {
+        [WriteOnly] public EntityCommandBuffer.ParallelWriter CommandBuffer;
+
+        public void Execute(
+            Entity ufoEntity,
+            [EntityInQueryIndex] int entityInQueryIndex,
+            in UFOTag ufoTag,
+            in CollisionData collision
+            )
+        {
+            // UFOs are just destroyed
+            CommandBuffer.DestroyEntity(entityInQueryIndex, ufoEntity);
+        }
+    }
+
 
     [BurstCompile]
     [WithNone(typeof(DestroyedTag))]
     partial struct HandlePlayerJob : IJobEntity
     {
         [DeallocateOnJobCompletion] public NativeArray<Entity> AllPowerups;
-        [DeallocateOnJobCompletion] public NativeArray<Entity> AllAsteroids;
         [DeallocateOnJobCompletion] public NativeArray<Entity> AllShieldedPlayers;
 
         [WriteOnly] public EntityCommandBuffer.ParallelWriter CommandBuffer;
@@ -157,27 +192,22 @@ public partial class CollisionHandlingSystem : SystemBase
             }
             else
             {
-                bool collidedWithAsteroid = AllAsteroids.Contains(collision.otherEntity);
-                if (collidedWithAsteroid)
+                bool isShielded = AllShieldedPlayers.Contains(playerEntity);
+                if (!isShielded)
                 {
-                    bool isShielded = AllShieldedPlayers.Contains(playerEntity);
-                    if (!isShielded)
-                    {
-                        CommandBuffer.AddComponent<DestroyedTag>(
-                            entityInQueryIndex,
-                            playerEntity);
+                    CommandBuffer.AddComponent<DestroyedTag>(
+                        entityInQueryIndex,
+                        playerEntity);
 
-                        Entity eventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
-                        CommandBuffer.AddComponent<PlayerDestroyedEvent>(
-                            entityInQueryIndex,
-                            eventEntity,
-                            new PlayerDestroyedEvent
-                            {
-                                Position = position.Value.xy
-                            });
-                    }
+                    Entity eventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+                    CommandBuffer.AddComponent<PlayerDestroyedEvent>(
+                        entityInQueryIndex,
+                        eventEntity,
+                        new PlayerDestroyedEvent
+                        {
+                            Position = position.Value.xy
+                        });
                 }
-
             }
 
             CommandBuffer.RemoveComponent<CollisionData>(entityInQueryIndex, playerEntity);
@@ -229,6 +259,10 @@ public partial class CollisionHandlingSystem : SystemBase
     }
 
     public struct PlayerDestroyedEvent : IComponentData
+    {
+        public float2 Position;
+    }
+    public struct UFODestroyedEvent : IComponentData
     {
         public float2 Position;
     }

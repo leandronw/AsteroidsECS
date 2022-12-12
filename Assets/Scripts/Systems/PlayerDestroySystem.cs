@@ -25,8 +25,8 @@ public partial class PlayerDestroySystem : SystemBase
         _query = GetEntityQuery(new EntityQueryDesc
         {
             All = new ComponentType[] {
-                ComponentType.ReadOnly<PlayerTag>(),
-                ComponentType.ReadWrite<DestroyedTag>()}
+                typeof(PlayerTag),
+                typeof(DestroyedTag)}
         });
     }
   
