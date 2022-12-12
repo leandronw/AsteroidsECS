@@ -66,6 +66,7 @@ MonoBehaviour:
     x: 0
     y: 0
     z: 0
+  PlaySound: 1
 --- !u!114 &8777079007283442094
 MonoBehaviour:
   m_ObjectHideFlags: 0

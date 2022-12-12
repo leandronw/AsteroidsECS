@@ -18,6 +18,8 @@ using UnityEngine.PlayerLoop;
 [UpdateBefore(typeof(EndInitializationEntityCommandBufferSystem))]
 public partial class WeaponEquipSystem : SystemBase
 {
+    public event Action OnWeaponEquipped;
+
     private EntityCommandBufferSystem _entityCommandBufferSystem;
  
     protected override void OnCreate()
@@ -54,9 +56,39 @@ public partial class WeaponEquipSystem : SystemBase
 
                 commandBuffer.AppendToBuffer<LinkedEntityGroup>(playerEntity, weaponEntity);
 
+                Entity eventEntity = commandBuffer.CreateEntity();
+                commandBuffer.AddComponent<WeaponEquipedEvent>(eventEntity,
+                    new WeaponEquipedEvent
+                    {
+                        PlaySound = request.PlaySound
+                    });
+                
+
 
             }).Schedule();
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
+
+
+        //
+        // dispatch events
+        //
+        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
+
+        Entities
+            .WithoutBurst()
+            .ForEach((Entity eventEntity, ref WeaponEquipedEvent eventComponent) =>
+            {
+                OnWeaponEquipped?.Invoke();
+                eventsCommandBuffer.DestroyEntity(eventEntity);
+
+                if (eventComponent.PlaySound) SfxPlayer.Instance.PlaySound(SoundId.WEAPON_PICKED);
+
+            }).Run();
+    }
+
+    public struct WeaponEquipedEvent : IComponentData
+    {
+        public bool PlaySound;
     }
 }

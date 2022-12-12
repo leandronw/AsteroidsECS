@@ -57,13 +57,6 @@ public partial class ShieldEnableSystem : SystemBase
                commandBuffer.AddComponent(shieldEntity, new LocalToWorld { });
 
                commandBuffer.AppendToBuffer<LinkedEntityGroup>(playerEntity, shieldEntity);
-               /*
-               if (childrenBuffer.IsEmpty)
-               {
-                   childrenBuffer.Add(playerEntity);
-               }
-
-               childrenBuffer.Add(shieldEntity);*/
 
                Entity eventEntity = commandBuffer.CreateEntity();
                commandBuffer.AddComponent<ShieldEnabledEvent>(
@@ -87,6 +80,8 @@ public partial class ShieldEnableSystem : SystemBase
                 OnShieldEnabled?.Invoke(eventComponent.Duration);
                 eventsCommandBuffer.DestroyEntity(eventEntity);
 
+                SfxPlayer.Instance.PlaySound(SoundId.SHIELD_ENABLED);
+
             }).Run();
     }
 
@@ -97,7 +92,6 @@ public partial class ShieldEnableSystem : SystemBase
 
     public struct ShieldDepletedEvent : IComponentData
     {
-        public Entity Entity;
     }
 
 }   

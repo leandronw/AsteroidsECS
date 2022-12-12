@@ -78,6 +78,8 @@ public partial class HyperspaceSystem : SystemBase
                 OnHyperspace?.Invoke(eventComponent.PreviousPosition, eventComponent.NewPosition);
                 eventsCommandBuffer.DestroyEntity(eventEntity);
 
+                SfxPlayer.Instance.PlaySound(SoundId.PLAYER_HYPERSPACE);
+
             }).Run();
     }
 

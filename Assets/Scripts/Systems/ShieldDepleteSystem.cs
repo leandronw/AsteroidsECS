@@ -69,6 +69,8 @@ public partial class ShieldDepleteSystem : SystemBase
                 OnShieldDepleted?.Invoke();
                 eventsCommandBuffer.DestroyEntity(eventEntity);
 
+                SfxPlayer.Instance.PlaySound(SoundId.SHIELD_DISABLED);
+
             }).Run();
 
     }

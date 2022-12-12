@@ -10,7 +10,8 @@ using UnityEngine.UIElements;
  * Makes UFOs shoot their bullets
  * */
 
-[UpdateInGroup(typeof(SimulationSystemGroup))]
+[UpdateInGroup(typeof(InitializationSystemGroup))]
+[UpdateAfter(typeof(UpdateWorldTimeSystem))]
 public partial class UFOAttackSystem : SystemBase
 {
     private EntityCommandBufferSystem _entityCommandBufferSystem;
@@ -42,7 +43,7 @@ public partial class UFOAttackSystem : SystemBase
                     weaponData.ElapsedTimeSinceLastShot = 0;
                 }
 
-            }).Schedule();
+            }).Run();
 
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
@@ -78,6 +79,8 @@ public partial class UFOAttackSystem : SystemBase
         commandBuffer.AddComponent(bulletEntity, bulletPosition);
         commandBuffer.AddComponent(bulletEntity, bulletRotation);
         commandBuffer.AddComponent(bulletEntity, bulletVelocity);
+
+        SfxPlayer.Instance.PlaySound(SoundId.UFO_SHOOT);
 
     }
 }

@@ -104,7 +104,6 @@ public class GameManager : MonoBehaviour
         CollisionHandlingSystem collisionsSystem = _world.GetOrCreateSystem<CollisionHandlingSystem>();
         collisionsSystem.OnPlayerDestroyed += PlayerDied;
         collisionsSystem.OnUFODestroyed += UFODestroyed;
-        collisionsSystem.OnPowerUpPicked += PowerUpPicked;
         collisionsSystem.OnAsteroidDestroyed += AsteroidDestroyed;
 
         HyperspaceSystem hyperspaceSystem = _world.GetOrCreateSystem<HyperspaceSystem>();
@@ -242,12 +241,6 @@ public class GameManager : MonoBehaviour
             });
     }
 
-    private void PowerUpPicked(float2 position)
-    {
-        Debug.Log("Powerup picked!");
-        // TO DO: show VFX
-    }
-
     private void UFODestroyed(float2 position)
     {
         // TO DO: add score
@@ -264,6 +257,8 @@ public class GameManager : MonoBehaviour
     private void PlayerDied(float2 position)
     {
         Debug.Log("Player died!");
+
+        SfxPlayer.Instance.PlaySound(SoundId.PLAYER_DIED);
 
         // TO DO: show death VFX
 

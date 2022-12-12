@@ -58,10 +58,14 @@ public partial class PlayerInputHandlingSystem : SystemBase
                         velocity.Linear += forwardVector * accelerationData.Acceleration * deltaTime;
                     }
                     commandBuffer.AddComponent<ThrustingTag>(playerEntity);
+
+                    SfxPlayer.Instance.PlayLoop(SoundId.PLAYER_THRUST);
                 }
                 else
                 {
                     commandBuffer.RemoveComponent<ThrustingTag>(playerEntity);
+
+                    SfxPlayer.Instance.StopLoop(SoundId.PLAYER_THRUST);
                 }
 
                 weaponData.ElapsedTimeSinceLastShot += deltaTime;
@@ -106,6 +110,8 @@ public partial class PlayerInputHandlingSystem : SystemBase
         commandBuffer.SetComponent(bulletEntity, bulletPosition);
         commandBuffer.SetComponent(bulletEntity, rotation);
         commandBuffer.SetComponent(bulletEntity, bulletVelocity);
+
+        SfxPlayer.Instance.PlaySound(SoundId.PLAYER_SHOOT);
 
     }
 }

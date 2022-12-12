@@ -22,8 +22,7 @@ public class GameUI : MonoBehaviour
 
     [SerializeField] private TMP_Text _score;
 
-    [SerializeField] private GameObject _countdown;
-    private Animator _countdownAnimator;
+    [SerializeField] private Countdown _countdown;
 
     void Start()
     {
@@ -37,11 +36,6 @@ public class GameUI : MonoBehaviour
 
         ShieldEnableSystem shieldEnableSystem = world.GetOrCreateSystem<ShieldEnableSystem>();
         shieldEnableSystem.OnShieldEnabled += ShowShield;
-
-        if (_countdown != null)
-        {
-            _countdownAnimator = _countdown.GetComponent<Animator>();
-        }
 
         HideGameOver();
         HideShield();
@@ -124,10 +118,7 @@ public class GameUI : MonoBehaviour
     {
         HideGameOver();
 
-        // turn off and on so animator resets
-        _countdown.SetActive(false);
-        _countdown.SetActive(true);
-        _countdownAnimator.SetFloat("Speed", 1f / time);
+        _countdown.Play(time);
     }
 
     private void UpdateScore(int score)

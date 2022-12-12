@@ -24,7 +24,6 @@ public partial class CollisionHandlingSystem : SystemBase
     // delegates
     public event Action<float2> OnPlayerDestroyed;
     public event Action<float2> OnUFODestroyed;
-    public event Action<float2> OnPowerUpPicked;
     public event Action<float2, AsteroidSize> OnAsteroidDestroyed;
 
     private EntityCommandBufferSystem _entityCommandBufferSystem;
@@ -100,6 +99,8 @@ public partial class CollisionHandlingSystem : SystemBase
                 OnPlayerDestroyed?.Invoke(eventComponent.Position);
                 eventsCommandBuffer.DestroyEntity(eventEntity);
 
+                SfxPlayer.Instance.PlaySound(SoundId.PLAYER_DIED);
+
             }).Run();
 
         Entities
@@ -109,16 +110,9 @@ public partial class CollisionHandlingSystem : SystemBase
               OnUFODestroyed?.Invoke(eventComponent.Position);
               eventsCommandBuffer.DestroyEntity(eventEntity);
 
+              SfxPlayer.Instance.PlaySound(SoundId.UFO_DIED);
+
           }).Run();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref PowerUpEvent eventComponent) =>
-            {
-                OnPowerUpPicked?.Invoke(eventComponent.Position);
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-            }).Run();
 
         Entities
            .WithoutBurst()
@@ -126,6 +120,12 @@ public partial class CollisionHandlingSystem : SystemBase
            {
                OnAsteroidDestroyed?.Invoke(eventComponent.Position, eventComponent.Size);
                eventsCommandBuffer.DestroyEntity(eventEntity);
+
+               SfxPlayer.Instance.PlaySound(
+                    eventComponent.Size == AsteroidSize.Big ?       SoundId.ASTEROID_DESTROYED_BIG :
+                    eventComponent.Size == AsteroidSize.Medium ?    SoundId.ASTEROID_DESTROYED_MEDIUM :
+                                                                    SoundId.ASTEROID_DESTROYED_SMALL);
+
 
            }).Run();
 
@@ -270,11 +270,6 @@ public partial class CollisionHandlingSystem : SystemBase
     public struct AsteroidDestroyedEvent : IComponentData
     {
         public AsteroidSize Size;
-        public float2 Position;
-    }
-
-    public struct PowerUpEvent : IComponentData
-    {
         public float2 Position;
     }
 }

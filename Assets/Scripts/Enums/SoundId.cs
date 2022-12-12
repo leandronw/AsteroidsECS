@@ -1,0 +1,26 @@
+
+public enum SoundId
+{
+    // UI
+    COUNTDOWN = 0,
+
+    // Asteroids
+    ASTEROID_DESTROYED_BIG = 100,
+    ASTEROID_DESTROYED_MEDIUM,
+    ASTEROID_DESTROYED_SMALL,
+
+    // Player
+    PLAYER_DIED = 200,
+    PLAYER_SHOOT,
+    PLAYER_HYPERSPACE,
+    PLAYER_THRUST,
+
+    // UFO
+    UFO_SHOOT = 300,
+    UFO_DIED,
+
+    // MISC
+    SHIELD_ENABLED = 400,
+    SHIELD_DISABLED,
+    WEAPON_PICKED
+}
