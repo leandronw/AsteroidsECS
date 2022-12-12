@@ -15,10 +15,8 @@ using UnityEngine.PlayerLoop;
  * Handles removing shield when time is up
  */
 [UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
 public partial class ShieldDepleteSystem : SystemBase
 {
-    public event Action OnShieldDepleted;
 
     private EntityCommandBufferSystem _entityCommandBufferSystem;
 
@@ -32,15 +30,16 @@ public partial class ShieldDepleteSystem : SystemBase
         float deltaTime = Time.DeltaTime;
 
         EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
+        
         EntityQuery equippedShieldQuery = GetEntityQuery(typeof(ShieldEquippedTag));
         NativeArray<Entity> equippedShields = equippedShieldQuery.ToEntityArray(Allocator.TempJob);
 
         Entities
             .WithDisposeOnCompletion(equippedShields)
-            .WithNone<ShieldPowerUpTag>()
             .ForEach((
                 Entity entity,  
-                ref ShieldData shieldData) =>
+                ref ShieldData shieldData,
+                in PlayerTag playerTag) =>
             {
                 shieldData.TimeRemaining -= deltaTime;
 
@@ -49,34 +48,22 @@ public partial class ShieldDepleteSystem : SystemBase
                     commandBuffer.RemoveComponent<ShieldData>(entity);
                     commandBuffer.DestroyEntity(equippedShields);
 
-                Entity eventEntity = commandBuffer.CreateEntity();
+                    Entity eventEntity = commandBuffer.CreateEntity();
                     commandBuffer.AddComponent<ShieldDepletedEvent>(eventEntity);
+
+                    Entity soundEventEntity = commandBuffer.CreateEntity();
+                    commandBuffer.AddComponent<SfxEvent>(
+                        soundEventEntity,
+                        new SfxEvent
+                        {
+                            Sound = SoundId.SHIELD_DISABLED
+                        });
                 }
 
             }).Schedule();
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
 
-        //
-        // dispatch events
-        //
-        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref ShieldDepletedEvent eventComponent) =>
-            {
-                OnShieldDepleted?.Invoke();
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-                SfxPlayer.Instance.PlaySound(SoundId.SHIELD_DISABLED);
-
-            }).Run();
-
-    }
-
-    public struct ShieldDepletedEvent : IComponentData
-    {
     }
 
 }   

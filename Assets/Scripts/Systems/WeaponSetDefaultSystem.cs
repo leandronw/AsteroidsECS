@@ -14,8 +14,8 @@ using UnityEngine.PlayerLoop;
 /*
  * Assigns default weapon to players without weapon
  */
-[UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
+[UpdateInGroup(typeof(InitializationSystemGroup))]
+[UpdateBefore(typeof(EndInitializationEntityCommandBufferSystem))]
 public partial class WeaponSystem : SystemBase
 {
 
@@ -26,7 +26,7 @@ public partial class WeaponSystem : SystemBase
 
     protected override void OnCreate()
     {
-        _entityCommandBufferSystem = World.GetOrCreateSystem<EndSimulationEntityCommandBufferSystem>();  
+        _entityCommandBufferSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>();  
     }
 
     protected override void OnStartRunning()

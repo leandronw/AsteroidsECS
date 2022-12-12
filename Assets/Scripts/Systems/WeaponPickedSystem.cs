@@ -15,7 +15,6 @@ using UnityEngine.PlayerLoop;
  * Handles picked weapon PowerUps
  */
 [UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
 public partial class WeaponPickedpSystem : SystemBase
 {
 
@@ -31,14 +30,13 @@ public partial class WeaponPickedpSystem : SystemBase
         EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
 
         Entities
-            .WithNone<DestroyedTag>()
             .ForEach((
                 Entity powerUpEntity,
                 in WeaponPowerUpTag powerupTag,
                 in PickedTag pickedTag,
                 in WeaponData weaponData,
                 in WeaponEquipRequest weaponEquipRequest,
-                in CollisionData collision) =>
+                in CollisionComponent collision) =>
             {
                 Entity playerEntity = collision.otherEntity;
                 commandBuffer.AddComponent<WeaponData>(

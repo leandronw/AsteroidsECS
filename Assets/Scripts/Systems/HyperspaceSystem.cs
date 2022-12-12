@@ -18,8 +18,6 @@ using UnityEngine.PlayerLoop;
 [UpdateBefore(typeof(EndInitializationEntityCommandBufferSystem))]
 public partial class HyperspaceSystem : SystemBase
 {
-    public event Action<float2, float2> OnHyperspace; 
-
     private EntityCommandBufferSystem _entityCommandBufferSystem;
 
     protected override void OnCreate()
@@ -56,37 +54,25 @@ public partial class HyperspaceSystem : SystemBase
                 Entity eventEntity = commandBuffer.CreateEntity();
                 commandBuffer.AddComponent<HyperspaceEvent>(
                     eventEntity,
-                    new HyperspaceEvent { 
+                    new HyperspaceEvent 
+                    { 
                         PreviousPosition = previousPosition,
-                        NewPosition = newPosition}
-                    );
+                        NewPosition = newPosition
+                    });
+
+               Entity soundEventEntity = commandBuffer.CreateEntity();
+               commandBuffer.AddComponent<SfxEvent>(
+                   soundEventEntity,
+                   new SfxEvent
+                   {
+                       Sound = SoundId.PLAYER_HYPERSPACE
+                   });
 
 
            }).Schedule();
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
-
-        //
-        // dispatch events
-        //
-        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref HyperspaceEvent eventComponent) =>
-            {
-                OnHyperspace?.Invoke(eventComponent.PreviousPosition, eventComponent.NewPosition);
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-                SfxPlayer.Instance.PlaySound(SoundId.PLAYER_HYPERSPACE);
-
-            }).Run();
     }
 
-    public struct HyperspaceEvent : IComponentData
-    {
-        public float2 PreviousPosition;
-        public float2 NewPosition;
-    }
 }   
 

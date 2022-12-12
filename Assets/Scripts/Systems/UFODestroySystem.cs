@@ -14,7 +14,7 @@ using UnityEngine.PlayerLoop;
  * Handles the destruction of Player entities
  */
 [UpdateInGroup(typeof(LateSimulationSystemGroup))]
-public partial class PlayerDestroySystem : SystemBase
+public partial class UFODestroySystem : SystemBase
 {
     private EntityCommandBufferSystem _entityCommandBufferSystem;
 
@@ -27,7 +27,7 @@ public partial class PlayerDestroySystem : SystemBase
   
     protected override void OnStartRunning()
     {
-        _vfxPrefab = _entityCommandBufferSystem.GetSingleton<PlayerVFXPrefabReference>().Prefab;
+        _vfxPrefab = _entityCommandBufferSystem.GetSingleton<UFOVFXPrefabReference>().Prefab;
     }
 
     protected override void OnUpdate()
@@ -40,7 +40,7 @@ public partial class PlayerDestroySystem : SystemBase
                Entity entity,
                int entityInQueryIndex,
                in DestroyedTag destroyed,
-               in PlayerTag playerTag,
+               in UFOTag ufoTag,
                in Translation position) =>
            {
                commandBuffer.DestroyEntity(entity);

@@ -43,7 +43,7 @@ public partial class UFOAttackSystem : SystemBase
                     weaponData.ElapsedTimeSinceLastShot = 0;
                 }
 
-            }).Run();
+            }).Schedule();
 
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
@@ -80,7 +80,13 @@ public partial class UFOAttackSystem : SystemBase
         commandBuffer.AddComponent(bulletEntity, bulletRotation);
         commandBuffer.AddComponent(bulletEntity, bulletVelocity);
 
-        SfxPlayer.Instance.PlaySound(SoundId.UFO_SHOOT);
+        Entity soundEventEntity = commandBuffer.CreateEntity();
+        commandBuffer.AddComponent<SfxEvent>(
+            soundEventEntity,
+            new SfxEvent
+            {
+                Sound = SoundId.UFO_SHOOT
+            });
 
     }
 }

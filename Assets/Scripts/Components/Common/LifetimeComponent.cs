@@ -1,7 +1,7 @@
 ﻿using Unity.Entities;
 
 [GenerateAuthoringComponent]
-public struct Lifetime : IComponentData
+public struct LifetimeComponent : IComponentData
 {
     public float Value;
 }

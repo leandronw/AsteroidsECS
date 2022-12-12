@@ -1,31 +1,17 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Globalization;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
 using Unity.Physics;
-using Unity.Physics.Systems;
 using Unity.Transforms;
-using UnityEngine;
-using UnityEngine.UIElements;
 
 /*
- * Handles all collision events. 
- * Rise events when player dies, a powerup is picked or an asteroid is destroyed
+ * Handles all collision events for bullets, players, UFOs and powerups
  */
 [UpdateInGroup(typeof(SimulationSystemGroup))]
 [UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
 public partial class CollisionHandlingSystem : SystemBase
 {
-    // delegates
-    public event Action<float2> OnPlayerDestroyed;
-    public event Action<float2> OnUFODestroyed;
-    public event Action<float2, AsteroidSize> OnAsteroidDestroyed;
-
     private EntityCommandBufferSystem _entityCommandBufferSystem;
 
     protected override void OnCreate()
@@ -35,6 +21,10 @@ public partial class CollisionHandlingSystem : SystemBase
 
     protected override void OnUpdate()
     {
+        EntityCommandBuffer.ParallelWriter commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter();
+
+        // player dies when colliding with anything except power-ups, 
+        // so we need to know what entities are power-ups
         EntityQuery allPowerupsQuery = GetEntityQuery(new EntityQueryDesc
         {
             Any = new ComponentType[] {
@@ -45,33 +35,33 @@ public partial class CollisionHandlingSystem : SystemBase
         });
         NativeArray<Entity> allPowerupEntities = allPowerupsQuery.ToEntityArray(Allocator.TempJob);
 
+        // player doesn't get hurt if shielded,
+        // so we need to know which players have shield
         EntityQuery shieldedQuery = GetEntityQuery(typeof(PlayerTag), typeof(ShieldData));
         NativeArray<Entity> shieldedPlayers = shieldedQuery.ToEntityArray(Allocator.TempJob);
 
-        EntityCommandBuffer.ParallelWriter commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter();
-
-
+        // handle bullets collisions
         JobHandle bulletsJobHandle = new HandleBulletsJob()
         {
             CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
 
         }.ScheduleParallel(this.Dependency);
 
-
+        // handle UFOs collisions
         JobHandle ufosJobHandle = new HandleUFOJob()
         {
             CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
 
         }.ScheduleParallel(this.Dependency);
 
-
+        // handle asteroids collisions
         JobHandle asteroidsJobHandle = new HandleAsteroidJob()
         {
             CommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer().AsParallelWriter()
 
         }.ScheduleParallel(this.Dependency);
 
-
+        // handle players collisions
         JobHandle playersJobHandle = new HandlePlayerJob()
         {
             AllPowerups = allPowerupEntities,
@@ -85,50 +75,6 @@ public partial class CollisionHandlingSystem : SystemBase
         this.Dependency = JobHandle.CombineDependencies(this.Dependency, asteroidsJobHandle);
         this.Dependency = JobHandle.CombineDependencies(this.Dependency, playersJobHandle);
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
-
-
-        //
-        // dispatch events
-        //
-        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref PlayerDestroyedEvent eventComponent) =>
-            {
-                OnPlayerDestroyed?.Invoke(eventComponent.Position);
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-                SfxPlayer.Instance.PlaySound(SoundId.PLAYER_DIED);
-
-            }).Run();
-
-        Entities
-          .WithoutBurst()
-          .ForEach((Entity eventEntity, ref UFODestroyedEvent eventComponent) =>
-          {
-              OnUFODestroyed?.Invoke(eventComponent.Position);
-              eventsCommandBuffer.DestroyEntity(eventEntity);
-
-              SfxPlayer.Instance.PlaySound(SoundId.UFO_DIED);
-
-          }).Run();
-
-        Entities
-           .WithoutBurst()
-           .ForEach((Entity eventEntity, ref AsteroidDestroyedEvent eventComponent) =>
-           {
-               OnAsteroidDestroyed?.Invoke(eventComponent.Position, eventComponent.Size);
-               eventsCommandBuffer.DestroyEntity(eventEntity);
-
-               SfxPlayer.Instance.PlaySound(
-                    eventComponent.Size == AsteroidSize.Big ?       SoundId.ASTEROID_DESTROYED_BIG :
-                    eventComponent.Size == AsteroidSize.Medium ?    SoundId.ASTEROID_DESTROYED_MEDIUM :
-                                                                    SoundId.ASTEROID_DESTROYED_SMALL);
-
-
-           }).Run();
-
     }
 
     [BurstCompile]
@@ -140,7 +86,7 @@ public partial class CollisionHandlingSystem : SystemBase
             Entity bulletEntity,
             [EntityInQueryIndex] int entityInQueryIndex,
             in BulletTag bulletTag,
-            in CollisionData collision
+            in CollisionComponent collision
             )
         {
             // bullets are just destroyed
@@ -149,6 +95,7 @@ public partial class CollisionHandlingSystem : SystemBase
     }
 
     [BurstCompile]
+    [WithNone(typeof(DestroyedTag))]
     partial struct HandleUFOJob : IJobEntity
     {
         [WriteOnly] public EntityCommandBuffer.ParallelWriter CommandBuffer;
@@ -157,11 +104,21 @@ public partial class CollisionHandlingSystem : SystemBase
             Entity ufoEntity,
             [EntityInQueryIndex] int entityInQueryIndex,
             in UFOTag ufoTag,
-            in CollisionData collision
+            in CollisionComponent collision
             )
         {
-            // UFOs are just destroyed
-            CommandBuffer.DestroyEntity(entityInQueryIndex, ufoEntity);
+            CommandBuffer.AddComponent<DestroyedTag>(
+                entityInQueryIndex,
+                ufoEntity);
+
+            Entity soundEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+            CommandBuffer.AddComponent<SfxEvent>(
+                entityInQueryIndex,
+                soundEventEntity,
+                new SfxEvent
+                {
+                    Sound = SoundId.UFO_DIED
+                });
         }
     }
 
@@ -179,7 +136,7 @@ public partial class CollisionHandlingSystem : SystemBase
             Entity playerEntity,
             [EntityInQueryIndex] int entityInQueryIndex,
             in PlayerTag playerTag,
-            in CollisionData collision,
+            in CollisionComponent collision,
             in Translation position
             )
         {
@@ -199,19 +156,36 @@ public partial class CollisionHandlingSystem : SystemBase
                         entityInQueryIndex,
                         playerEntity);
 
-                    Entity eventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+                    Entity playerDestroyedEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
                     CommandBuffer.AddComponent<PlayerDestroyedEvent>(
                         entityInQueryIndex,
-                        eventEntity,
+                        playerDestroyedEventEntity,
                         new PlayerDestroyedEvent
                         {
                             Position = position.Value.xy
                         });
+
+                    Entity soundEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+                    CommandBuffer.AddComponent<SfxEvent>(
+                        entityInQueryIndex,
+                        soundEventEntity,
+                        new SfxEvent
+                        {
+                            Sound = SoundId.PLAYER_DIED
+                        });
+
+                    Entity loopStopEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+                    CommandBuffer.AddComponent<SfxLoopStopEvent>(
+                        entityInQueryIndex,
+                        loopStopEventEntity,
+                        new SfxLoopStopEvent
+                        {
+                            Sound = SoundId.PLAYER_THRUST
+                        });
                 }
             }
 
-            CommandBuffer.RemoveComponent<CollisionData>(entityInQueryIndex, playerEntity);
-
+            CommandBuffer.RemoveComponent<CollisionComponent>(entityInQueryIndex, playerEntity);
         }
     }
 
@@ -224,53 +198,34 @@ public partial class CollisionHandlingSystem : SystemBase
             Entity asteroidEntity,
             [EntityInQueryIndex] int entityInQueryIndex,
             in AsteroidSizeComponent asteroidSize,
-            in CollisionData collision,
+            in CollisionComponent collision,
             in Translation position,
             in PhysicsVelocity velocity
             )
         {
-            if (asteroidSize.Size != AsteroidSize.Small)
-            {
-                Entity spawnerEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
-                CommandBuffer.AddComponent<AsteroidSpawnRequest>(
-                    entityInQueryIndex,
-                    spawnerEntity,
-                    new AsteroidSpawnRequest
-                    {
-                        Amount = 2,
-                        Position = position.Value.xy,
-                        PreviousVelocity = velocity.Linear,
-                        Size = asteroidSize.Size == AsteroidSize.Big ? AsteroidSize.Medium : AsteroidSize.Small
-                    });
-            }
+            CommandBuffer.AddComponent<DestroyedTag>(entityInQueryIndex, asteroidEntity);
 
-            CommandBuffer.DestroyEntity(entityInQueryIndex, asteroidEntity);
-
-            Entity eventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+            Entity asteroidDestroyedEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
             CommandBuffer.AddComponent<AsteroidDestroyedEvent>(
                 entityInQueryIndex,
-                eventEntity,
+                asteroidDestroyedEventEntity,
                 new AsteroidDestroyedEvent
                 {
                     Size = asteroidSize.Size,
                     Position = position.Value.xy
                 });
+
+            Entity soundEventEntity = CommandBuffer.CreateEntity(entityInQueryIndex);
+            CommandBuffer.AddComponent<SfxEvent>(
+                entityInQueryIndex,
+                soundEventEntity,
+                new SfxEvent
+                {
+                    Sound = asteroidSize.Size == AsteroidSize.Big ? SoundId.ASTEROID_DESTROYED_BIG :
+                            asteroidSize.Size == AsteroidSize.Medium ? SoundId.ASTEROID_DESTROYED_MEDIUM :
+                                                                        SoundId.ASTEROID_DESTROYED_SMALL
+                });
         }
-    }
-
-    public struct PlayerDestroyedEvent : IComponentData
-    {
-        public float2 Position;
-    }
-    public struct UFODestroyedEvent : IComponentData
-    {
-        public float2 Position;
-    }
-
-    public struct AsteroidDestroyedEvent : IComponentData
-    {
-        public AsteroidSize Size;
-        public float2 Position;
     }
 }
 

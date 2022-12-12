@@ -12,14 +12,12 @@ using Unity.Transforms;
 using UnityEngine.PlayerLoop;
 
 /*
- * Creates a shield representation as player's child when a new shield is picked
+ * Creates the shield visualization when a shield power-up is picked
  */
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 [UpdateBefore(typeof(EndInitializationEntityCommandBufferSystem))]
 public partial class ShieldEnableSystem : SystemBase
 {
-    public event Action<float> OnShieldEnabled; 
-
     private EntityCommandBufferSystem _entityCommandBufferSystem;
 
     protected override void OnCreate()
@@ -40,14 +38,16 @@ public partial class ShieldEnableSystem : SystemBase
            .WithNone<DestroyedTag>()
            .ForEach((
                Entity playerEntity,
-                in PlayerTag playerTag,
+               in PlayerTag playerTag,
                in ShieldEnableRequest request,
                in ShieldData shieldData) =>
            {
-               commandBuffer.DestroyEntity(equippedShields);
-
                commandBuffer.RemoveComponent<ShieldEnableRequest>(playerEntity);
 
+               // destroy any previous evisting shield
+               commandBuffer.DestroyEntity(equippedShields);
+
+               // create new shield
                Entity shieldEntity = commandBuffer.Instantiate(shieldData.ShieldPrefab);
                commandBuffer.AddComponent<ShieldEquippedTag>(shieldEntity);
 
@@ -55,43 +55,29 @@ public partial class ShieldEnableSystem : SystemBase
                commandBuffer.AddComponent(shieldEntity, new Parent { Value = playerEntity });
                commandBuffer.AddComponent(shieldEntity, new LocalToParent { });
                commandBuffer.AddComponent(shieldEntity, new LocalToWorld { });
-
                commandBuffer.AppendToBuffer<LinkedEntityGroup>(playerEntity, shieldEntity);
 
+               // create events
                Entity eventEntity = commandBuffer.CreateEntity();
                commandBuffer.AddComponent<ShieldEnabledEvent>(
                    eventEntity,
-                   new ShieldEnabledEvent { Duration = shieldData.TimeRemaining });
+                   new ShieldEnabledEvent 
+                   { 
+                       Duration = shieldData.TimeRemaining 
+                   });
 
+               Entity soundEventEntity = commandBuffer.CreateEntity();
+               commandBuffer.AddComponent<SfxEvent>(
+                   soundEventEntity,
+                   new SfxEvent
+                   {
+                       Sound = SoundId.SHIELD_ENABLED
+                   });
 
            }).Schedule();
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
 
-        //
-        // dispatch events
-        //
-        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref ShieldEnabledEvent eventComponent) =>
-            {
-                OnShieldEnabled?.Invoke(eventComponent.Duration);
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-                SfxPlayer.Instance.PlaySound(SoundId.SHIELD_ENABLED);
-
-            }).Run();
-    }
-
-    public struct ShieldEnabledEvent : IComponentData
-    {
-        public float Duration;
-    }
-
-    public struct ShieldDepletedEvent : IComponentData
-    {
     }
 
 }   

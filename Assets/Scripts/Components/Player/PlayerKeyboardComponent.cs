@@ -2,7 +2,7 @@ using Unity.Entities;
 using UnityEngine;
 
 [GenerateAuthoringComponent]
-public struct PlayerKeyboardData : IComponentData
+public struct PlayerKeyboardComponent : IComponentData
 {
     public KeyCode ShootKey;
     public KeyCode ThrustKey;

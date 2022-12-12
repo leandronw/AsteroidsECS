@@ -21,7 +21,7 @@ public partial class PlayerKeyboardInputSystem : SystemBase
             .ForEach((
                 Entity playerEntity,
                 ref PlayerInputData inputData,
-                in PlayerKeyboardData keyboardData) =>
+                in PlayerKeyboardComponent keyboardData) =>
             {
                 inputData.IsShooting = Input.GetKey(keyboardData.ShootKey);
                 inputData.IsThrusting = Input.GetKey(keyboardData.ThrustKey);

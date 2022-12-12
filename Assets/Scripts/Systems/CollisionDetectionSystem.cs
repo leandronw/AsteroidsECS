@@ -37,7 +37,7 @@ public partial class CollisionDetectionSystem : SystemBase
             Any = new ComponentType[] {
                 ComponentType.ReadOnly<DestroyedTag>(),
                 ComponentType.ReadOnly<PickedTag>(),
-                ComponentType.ReadOnly<CollisionData>()}
+                ComponentType.ReadOnly<CollisionComponent>()}
         });
 
         NativeArray<Entity> alreadyCollidedEntities = alreadyCollidedQuery.ToEntityArray(Allocator.TempJob);
@@ -67,13 +67,13 @@ public partial class CollisionDetectionSystem : SystemBase
                 return;
             }
 
-            CommandBuffer.AddComponent<CollisionData>(
+            CommandBuffer.AddComponent<CollisionComponent>(
                 triggerEvent.EntityA, 
-                new CollisionData { otherEntity = triggerEvent.EntityB  });
+                new CollisionComponent { otherEntity = triggerEvent.EntityB  });
 
-            CommandBuffer.AddComponent<CollisionData>(
+            CommandBuffer.AddComponent<CollisionComponent>(
                 triggerEvent.EntityB,
-                new CollisionData { otherEntity = triggerEvent.EntityA });
+                new CollisionComponent { otherEntity = triggerEvent.EntityA });
         }
     }
 }

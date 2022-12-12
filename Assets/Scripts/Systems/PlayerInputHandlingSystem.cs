@@ -1,3 +1,4 @@
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -13,20 +14,29 @@ using UnityEngine;
 [UpdateAfter(typeof(UpdateWorldTimeSystem))]
 public partial class PlayerInputHandlingSystem : SystemBase
 {
-    private Entity _bulletPrefab;
     private EntityCommandBufferSystem _entityCommandBufferSystem;
+
+    private EntityQuery _thrustQuery;
 
     protected override void OnCreate()
     {
         _entityCommandBufferSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>();
+
+        _thrustQuery = GetEntityQuery(new EntityQueryDesc
+        {
+            All = new ComponentType[] { typeof(ThrustTag) },
+            Options = EntityQueryOptions.IncludeDisabled
+        });
     }
 
     protected override void OnUpdate()
     {
         float deltaTime = Time.DeltaTime;
+        EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
+        NativeArray<Entity> thrustEntities = _thrustQuery.ToEntityArray(Allocator.TempJob);
 
         Entities
-            .WithoutBurst()
+            .WithDisposeOnCompletion(thrustEntities)
             .ForEach((
                 Entity playerEntity,
                 ref PhysicsVelocity velocity,
@@ -36,9 +46,7 @@ public partial class PlayerInputHandlingSystem : SystemBase
                 in PlayerAccelerationData accelerationData,
                 in PlayerRotationData rotationData,
                 in PlayerInputData inputData) =>
-            {
-                EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
+            {  
                 if (inputData.IsTurningLeft)
                 {
                     rotation.Value = math.mul(rotation.Value, quaternion.RotateZ(rotationData.Speed * deltaTime));
@@ -57,15 +65,28 @@ public partial class PlayerInputHandlingSystem : SystemBase
                     {
                         velocity.Linear += forwardVector * accelerationData.Acceleration * deltaTime;
                     }
-                    commandBuffer.AddComponent<ThrustingTag>(playerEntity);
 
-                    SfxPlayer.Instance.PlayLoop(SoundId.PLAYER_THRUST);
+                    commandBuffer.RemoveComponent<Disabled>(thrustEntities);
+
+                    Entity soundEventEntity = commandBuffer.CreateEntity();
+                    commandBuffer.AddComponent<SfxLoopPlayEvent>(
+                        soundEventEntity,
+                        new SfxLoopPlayEvent
+                        {
+                            Sound = SoundId.PLAYER_THRUST
+                        });
                 }
                 else
                 {
-                    commandBuffer.RemoveComponent<ThrustingTag>(playerEntity);
+                    commandBuffer.AddComponent<Disabled>(thrustEntities);
 
-                    SfxPlayer.Instance.StopLoop(SoundId.PLAYER_THRUST);
+                    Entity soundEventEntity = commandBuffer.CreateEntity();
+                    commandBuffer.AddComponent<SfxLoopStopEvent>(
+                        soundEventEntity,
+                        new SfxLoopStopEvent
+                        {
+                            Sound = SoundId.PLAYER_THRUST
+                        });
                 }
 
                 weaponData.ElapsedTimeSinceLastShot += deltaTime;
@@ -82,13 +103,13 @@ public partial class PlayerInputHandlingSystem : SystemBase
                     commandBuffer.AddComponent<JumpToHyperspaceTag>(playerEntity);
                 }
             })
-            .Run();
+            .Schedule();
 
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
     }
 
-    private void ShootWeapon(
+    static private void ShootWeapon(
         in PhysicsVelocity playerVelocity, 
         in Rotation rotation, 
         in Translation position, 
@@ -111,7 +132,13 @@ public partial class PlayerInputHandlingSystem : SystemBase
         commandBuffer.SetComponent(bulletEntity, rotation);
         commandBuffer.SetComponent(bulletEntity, bulletVelocity);
 
-        SfxPlayer.Instance.PlaySound(SoundId.PLAYER_SHOOT);
+        Entity soundEventEntity = commandBuffer.CreateEntity();
+        commandBuffer.AddComponent<SfxEvent>(
+            soundEventEntity,
+            new SfxEvent
+            {
+                Sound = SoundId.PLAYER_SHOOT
+            });
 
     }
 }

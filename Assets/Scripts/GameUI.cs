@@ -7,8 +7,6 @@ using UnityEngine.UI;
 
 public class GameUI : MonoBehaviour
 {
-    [SerializeField] private GameManager _gameManager;
-
     [SerializeField] private RectTransform _livesContainer;
     [SerializeField] private GameObject _lifePrefab;
     private LinkedList<GameObject> _lives = new LinkedList<GameObject>();
@@ -20,22 +18,20 @@ public class GameUI : MonoBehaviour
     private float _shieldTotalTime;
     private float _shieldRemainingTime;
 
-    [SerializeField] private TMP_Text _score;
-
     [SerializeField] private Countdown _countdown;
 
     void Start()
     {
-        _gameManager.OnCountdownStarted += ShowCountdown;
-        _gameManager.OnLivesChanged += UpdateLives;
-        _gameManager.OnGameEnded += ShowGameOver;
-
+        // register to events
         World world = World.DefaultGameObjectInjectionWorld;
-        ShieldDepleteSystem shieldDepleteSystem = world.GetOrCreateSystem<ShieldDepleteSystem>();
-        shieldDepleteSystem.OnShieldDepleted += HideShield;
+        EventsDispatcherSystem eventsSystem = world.GetOrCreateSystem<EventsDispatcherSystem>();
+        eventsSystem.OnShieldDepleted += HideShield;
+        eventsSystem.OnShieldEnabled += ShowShield;
 
-        ShieldEnableSystem shieldEnableSystem = world.GetOrCreateSystem<ShieldEnableSystem>();
-        shieldEnableSystem.OnShieldEnabled += ShowShield;
+        GameManager gameManager = GameManager.Instance;
+        gameManager.OnCountdownStarted += ShowCountdown;
+        gameManager.OnLivesChanged += UpdateLives;
+        gameManager.OnGameEnded += ShowGameOver;
 
         HideGameOver();
         HideShield();
@@ -120,10 +116,5 @@ public class GameUI : MonoBehaviour
 
         _countdown.Play(time);
     }
-
-    private void UpdateScore(int score)
-    {
-        _score.text = score.ToString();
-    }
-
+ 
 }

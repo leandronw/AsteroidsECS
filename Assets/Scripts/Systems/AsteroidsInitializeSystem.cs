@@ -11,15 +11,14 @@ using UnityEngine.Assertions.Must;
  * Initializes all Asteroids with a NeedsInitTag component and removes that component
  */
 
-[UpdateInGroup(typeof(InitializationSystemGroup))]
-[UpdateAfter(typeof(BeginInitializationEntityCommandBufferSystem))]
+[UpdateInGroup(typeof(SimulationSystemGroup))]
 public partial class AsteroidsInitializeSystem : SystemBase
 {
-    private EndInitializationEntityCommandBufferSystem _entityCommandBufferSystem;
+    private EntityCommandBufferSystem _entityCommandBufferSystem;
 
     protected override void OnCreate()
     {
-        _entityCommandBufferSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>();
+        _entityCommandBufferSystem = World.GetOrCreateSystem<EndSimulationEntityCommandBufferSystem>();
     }
 
     protected override void OnUpdate()

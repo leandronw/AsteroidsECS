@@ -11,6 +11,7 @@ using UnityEngine.UIElements;
 /**
  * Handles teleporting entities to the other side when they leave the screen
  * */
+[UpdateInGroup(typeof(LateSimulationSystemGroup))]
 public partial class WrapAroundEdgesSystem : SystemBase
 {
 

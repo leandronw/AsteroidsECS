@@ -44,9 +44,10 @@ public partial class AsteroidsSpawnSystem : SystemBase
         NativeArray<Entity> prefabs = _asteroidPrefabs;
 
         Entities
+            .WithReadOnly(prefabs)
             .ForEach((
                 Entity spawnEntity,
-                in AsteroidSpawnRequest spawnRequest) => 
+                in AsteroidsSpawnRequest spawnRequest) => 
             {
                 for (int i = 0; i < spawnRequest.Amount; i++)
                 {

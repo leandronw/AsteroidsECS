@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Entities;
 using UnityEngine;
 
 [RequireComponent(typeof(AudioSource))]
@@ -35,6 +36,13 @@ public class SfxPlayer : MonoBehaviour
         {
             _clipsDictionary.Add(reference.Id, reference.Clip);
         }
+
+        // register to events
+        World world = World.DefaultGameObjectInjectionWorld;
+        EventsDispatcherSystem eventsSystem = world.GetOrCreateSystem<EventsDispatcherSystem>();
+        eventsSystem.OnSoundPlayed += PlaySound; 
+        eventsSystem.OnSoundLoopStarted += PlayLoop;
+        eventsSystem.OnSoundLoopStopped += StopLoop;
     }
 
     public void PlaySound(SoundId soundId)

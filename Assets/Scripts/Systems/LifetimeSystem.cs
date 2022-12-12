@@ -1,11 +1,12 @@
 ﻿using Unity.Entities;
 
 /*
- * Decreases Lifetime of entities and destroys entities Lifetime reaches 0
+ * Decreases Lifetime of entities and destroys them when it reaches 0
  */
+[UpdateInGroup(typeof(SimulationSystemGroup))]
 public partial class LifetimeSystem : SystemBase
 {
-    private EndSimulationEntityCommandBufferSystem _entityCommandBufferSystem;
+    private EntityCommandBufferSystem _entityCommandBufferSystem;
 
     protected override void OnCreate()
     {
@@ -18,10 +19,11 @@ public partial class LifetimeSystem : SystemBase
         float deltaTime = Time.DeltaTime;
 
         Entities
+            .WithNone<Prefab>()
             .ForEach((
                 Entity entity, 
                 int entityInQueryIndex, 
-                ref Lifetime lifetime) =>
+                ref LifetimeComponent lifetime) =>
             {
                 lifetime.Value -= deltaTime;
 

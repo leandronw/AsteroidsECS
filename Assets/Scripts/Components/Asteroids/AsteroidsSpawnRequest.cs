@@ -1,7 +1,7 @@
 using Unity.Entities;
 using Unity.Mathematics;
 
-public struct AsteroidSpawnRequest : IComponentData
+public struct AsteroidsSpawnRequest : IComponentData
 {
     public AsteroidSize Size;
     public float2 Position;

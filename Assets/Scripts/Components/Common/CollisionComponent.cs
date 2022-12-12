@@ -1,7 +1,7 @@
 using Unity.Entities;
 
 
-public struct CollisionData : IComponentData 
+public struct CollisionComponent : IComponentData 
 {
     public Entity otherEntity;
 }

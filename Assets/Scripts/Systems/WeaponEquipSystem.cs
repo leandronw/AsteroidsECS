@@ -12,19 +12,16 @@ using Unity.Transforms;
 using UnityEngine.PlayerLoop;
 
 /*
- * Creates a weapon representation as player's child when a new weapon is picked
+ * Creates a weapon representation as player's child when a new weapon is equipped
  */
-[UpdateInGroup(typeof(InitializationSystemGroup))]
-[UpdateBefore(typeof(EndInitializationEntityCommandBufferSystem))]
+[UpdateInGroup(typeof(SimulationSystemGroup))]
 public partial class WeaponEquipSystem : SystemBase
 {
-    public event Action OnWeaponEquipped;
-
     private EntityCommandBufferSystem _entityCommandBufferSystem;
  
     protected override void OnCreate()
     {
-        _entityCommandBufferSystem = World.GetOrCreateSystem<EndInitializationEntityCommandBufferSystem>(); 
+        _entityCommandBufferSystem = World.GetOrCreateSystem<EndSimulationEntityCommandBufferSystem>(); 
     }
 
     protected override void OnUpdate()
@@ -57,38 +54,22 @@ public partial class WeaponEquipSystem : SystemBase
                 commandBuffer.AppendToBuffer<LinkedEntityGroup>(playerEntity, weaponEntity);
 
                 Entity eventEntity = commandBuffer.CreateEntity();
-                commandBuffer.AddComponent<WeaponEquipedEvent>(eventEntity,
-                    new WeaponEquipedEvent
-                    {
-                        PlaySound = request.PlaySound
-                    });
-                
+                commandBuffer.AddComponent<WeaponEquipedEvent>(eventEntity);
 
+                if (request.PlaySound) 
+                {
+                    Entity soundEventEntity = commandBuffer.CreateEntity();
+                    commandBuffer.AddComponent<SfxEvent>(
+                        soundEventEntity,
+                        new SfxEvent
+                        {
+                            Sound = SoundId.WEAPON_PICKED
+                        });
+                }
 
             }).Schedule();
 
         _entityCommandBufferSystem.AddJobHandleForProducer(this.Dependency);
-
-
-        //
-        // dispatch events
-        //
-        var eventsCommandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
-
-        Entities
-            .WithoutBurst()
-            .ForEach((Entity eventEntity, ref WeaponEquipedEvent eventComponent) =>
-            {
-                OnWeaponEquipped?.Invoke();
-                eventsCommandBuffer.DestroyEntity(eventEntity);
-
-                if (eventComponent.PlaySound) SfxPlayer.Instance.PlaySound(SoundId.WEAPON_PICKED);
-
-            }).Run();
     }
 
-    public struct WeaponEquipedEvent : IComponentData
-    {
-        public bool PlaySound;
-    }
 }

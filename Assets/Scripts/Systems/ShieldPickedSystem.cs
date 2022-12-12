@@ -15,7 +15,6 @@ using UnityEngine.PlayerLoop;
  * Handles picked shield PowerUps
  */
 [UpdateInGroup(typeof(SimulationSystemGroup))]
-[UpdateAfter(typeof(BeginSimulationEntityCommandBufferSystem))]
 public partial class ShieldPickedpSystem : SystemBase
 {
 
@@ -31,13 +30,12 @@ public partial class ShieldPickedpSystem : SystemBase
         EntityCommandBuffer commandBuffer = _entityCommandBufferSystem.CreateCommandBuffer();
 
         Entities
-            .WithNone<DestroyedTag>()
             .ForEach((
                 Entity powerUpEntity,
                 in ShieldPowerUpTag powerupTag,
                 in PickedTag pickedTag,
                 in ShieldData shieldData,
-                in CollisionData collision) =>
+                in CollisionComponent collision) =>
             {
                 Entity playerEntity = collision.otherEntity;
                 commandBuffer.AddComponent<ShieldData>(

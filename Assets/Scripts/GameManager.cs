@@ -1,7 +1,6 @@
 using UnityEngine;
 using Unity.Entities;
 using Unity.Transforms;
-using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Physics;
 using System.Threading.Tasks;
@@ -13,6 +12,8 @@ using System;
  */
 public class GameManager : MonoBehaviour
 {
+    public static GameManager Instance { get; private set; } // singleton instance
+
     public enum GameState
     {
         INIT,
@@ -61,15 +62,28 @@ public class GameManager : MonoBehaviour
     private List<Entity> _powerUpPrefabs = new List<Entity>();
 
     // Config
-    private PlayerKeyboardData _player1KeyboardConfig;
+    private PlayerKeyboardComponent _player1KeyboardConfig;
 
+    void Awake()
+    {
+        if (Instance != null)
+        {
+            Destroy(this.gameObject);
+        }
+        else
+        {
+            Instance = this;
+        }
+    }
 
     void Start()
     {
+        // get all necessary ECS references
         _world = World.DefaultGameObjectInjectionWorld;
         _entityCommandBufferSystem = _world.GetOrCreateSystem<BeginInitializationEntityCommandBufferSystem>();
         _entityManager = _world.EntityManager;
 
+        // create query for cleaning up everything
         _allGameEntitiesQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
         {
             Any = new ComponentType[] {
@@ -81,14 +95,16 @@ public class GameManager : MonoBehaviour
                 typeof(UFOTag)}
         });
 
+        // create query for checking if level was completed
         _anyEnemiesLeftQuery = _entityManager.CreateEntityQuery(new EntityQueryDesc
         {
             Any = new ComponentType[] {
                 typeof(AsteroidSizeComponent),
-                typeof(AsteroidSpawnRequest),
+                typeof(AsteroidsSpawnRequest),
                 typeof(UFOTag)}
         });
 
+        // get all prefab references
         _playerPrefab = _entityCommandBufferSystem.GetSingleton<PlayerPrefabReference>().Prefab;
         _ufoPrefab = _entityCommandBufferSystem.GetSingleton<UFOPrefabReference>().Prefab;
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<ShieldPowerUpBluePrefabReference>().Prefab);
@@ -100,17 +116,16 @@ public class GameManager : MonoBehaviour
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpYellowPrefabReference>().Prefab);
         _powerUpPrefabs.Add(_entityCommandBufferSystem.GetSingleton<WeaponPowerUpGreenPrefabReference>().Prefab);
 
+        // register to events
+        EventsDispatcherSystem eventsSystem = _world.GetOrCreateSystem<EventsDispatcherSystem>();
+        eventsSystem.OnPlayerDestroyed += PlayerDied;
+        eventsSystem.OnUFODestroyed += UFODestroyed;
+        eventsSystem.OnAsteroidDestroyed += AsteroidDestroyed;
+        eventsSystem.OnHyperspace += JumpedIntoHyperspace;
 
-        CollisionHandlingSystem collisionsSystem = _world.GetOrCreateSystem<CollisionHandlingSystem>();
-        collisionsSystem.OnPlayerDestroyed += PlayerDied;
-        collisionsSystem.OnUFODestroyed += UFODestroyed;
-        collisionsSystem.OnAsteroidDestroyed += AsteroidDestroyed;
-
-        HyperspaceSystem hyperspaceSystem = _world.GetOrCreateSystem<HyperspaceSystem>();
-        hyperspaceSystem.OnHyperspace += JumpedIntoHyperspace;
-
+        // get all config data
         var player1KeyboardConfigEntity = _entityCommandBufferSystem.GetSingletonEntity<Player1KeyboardConfigTag>();
-        _player1KeyboardConfig = _entityManager.GetComponentData<PlayerKeyboardData>(player1KeyboardConfigEntity);
+        _player1KeyboardConfig = _entityManager.GetComponentData<PlayerKeyboardComponent>(player1KeyboardConfigEntity);
     }
 
     private void Update()
@@ -155,13 +170,12 @@ public class GameManager : MonoBehaviour
         _currentUfoTimer = 0f;
 
         OnLivesChanged?.Invoke(_playerLives);
-
         OnCountdownStarted?.Invoke(_countdownTime);
+
         await Task.Delay((int)(_countdownTime * 1000f));
 
         if (_state != GameState.STARTING_GAME)
             return;
-
 
         OnLivesChanged?.Invoke(_playerLives - 1);
         SpawnPlayer();
@@ -178,14 +192,18 @@ public class GameManager : MonoBehaviour
 
         OnGameEnded?.Invoke();
 
-        Debug.Log("GAME OVER :(");
+        Debug.Log("GAME OVER!");
     }
 
     private void SpawnPlayer()
     {
         _player1Entity = _entityManager.Instantiate(_playerPrefab);
-        _entityManager.AddComponentData<PlayerKeyboardData>(_player1Entity, _player1KeyboardConfig);
-        
+        _entityManager.AddComponentData<PlayerKeyboardComponent>(_player1Entity, _player1KeyboardConfig);
+
+        // disables thrust particle system
+        EntityQuery thrustQuery = _entityManager.CreateEntityQuery(typeof(ThrustTag));
+        _entityManager.AddComponent<Disabled>(thrustQuery);
+
         // dynamic buffer for linking children so they destroy when player dies 
         _entityManager.AddBuffer<LinkedEntityGroup>(_player1Entity); 
     }
@@ -244,14 +262,12 @@ public class GameManager : MonoBehaviour
     private void UFODestroyed(float2 position)
     {
         // TO DO: add score
-        // TO DO: show VFX
     }
 
 
     private void AsteroidDestroyed(float2 position, AsteroidSize size)
     {
         // TO DO: add score
-        // TO DO: show VFX
     }
 
     private void PlayerDied(float2 position)
@@ -259,8 +275,6 @@ public class GameManager : MonoBehaviour
         Debug.Log("Player died!");
 
         SfxPlayer.Instance.PlaySound(SoundId.PLAYER_DIED);
-
-        // TO DO: show death VFX
 
         if (_playerLives > 1)
         {
@@ -316,9 +330,9 @@ public class GameManager : MonoBehaviour
     private void SpawnAsteroid(float2 position)
     {
         Entity spawnerEntity = _entityManager.CreateEntity();
-        _entityManager.AddComponentData<AsteroidSpawnRequest>(
+        _entityManager.AddComponentData<AsteroidsSpawnRequest>(
             spawnerEntity,
-            new AsteroidSpawnRequest
+            new AsteroidsSpawnRequest
             {
                 Amount = 1,
                 Position = position,
